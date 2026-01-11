@@ -35,12 +35,10 @@ export default function Home() {
   }, [heroReady]);
 
   return (
-    <div className="relative min-h-screen bg-[#FEFAEF]">
-      <GridOverlay />
-      <div className="relative z-10">
-        <Nav />
+    <GridOverlay>
+      <Nav />
 
-        <main className="mx-auto flex w-full max-w-4xl flex-col items-center px-8 sm:px-12 lg:px-16 xl:px-20">
+      <main className="mx-auto flex w-full max-w-4xl flex-col items-center px-8 sm:px-12 lg:px-16 xl:px-20">
         {/* Hero section */}
         <section className="hero-section flex min-h-[50vh] w-full flex-col justify-center py-12 sm:py-16 lg:py-24">
           {/* starts hidden */}
@@ -78,13 +76,12 @@ export default function Home() {
 
             <div className="mt-4 w-full sm:mt-6">
               <p className="text-sm text-gray-500 sm:text-base">
-                Cursor for scripting content.
+                Good artists copy, great artists steal viral content ideas
               </p>
             </div>
           </div>
         </section>
       </main>
-      </div>
-    </div>
+    </GridOverlay>
   );
 }
