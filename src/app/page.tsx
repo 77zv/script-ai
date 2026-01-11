@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { gsap } from "gsap";
-import Nav from "@/components/layout/Nav";
 import Image from "next/image";
-import GridOverlay from "@/components/layout/GridOverlay";
 
 export default function Home() {
   const [heroReady, setHeroReady] = useState(false);
@@ -35,10 +33,7 @@ export default function Home() {
   }, [heroReady]);
 
   return (
-    <GridOverlay>
-      <Nav />
-
-      <main className="mx-auto flex w-full max-w-4xl flex-col items-center px-8 sm:px-12 lg:px-16 xl:px-20">
+    <>
         {/* Hero section */}
         <section className="hero-section flex min-h-[50vh] w-full flex-col justify-center py-12 sm:py-16 lg:py-24">
           {/* starts hidden */}
@@ -81,7 +76,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-      </main>
-    </GridOverlay>
+    </>
   );
 }

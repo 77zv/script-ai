@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, GFS_Didot} from "next/font/google";
+import GridOverlay from "@/components/layout/GridOverlay";
+import Nav from "@/components/layout/Nav";
 
 import "./globals.css";
 
@@ -37,7 +39,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${gfsDidot.variable} antialiased`}
       >
-        {children}
+        <GridOverlay>
+          <Nav />
+          {children}
+        </GridOverlay>
       </body>
     </html>
   );

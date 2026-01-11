@@ -2,21 +2,93 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+ 
+- PostgreSQL database
+- pnpm (or npm/yarn)
+
+### Setup
+
+1. **Install dependencies:**
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+```
+
+2. **Set up environment variables:**
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+
+# Better Auth
+BETTER_AUTH_SECRET=your-secret-key-minimum-32-characters-long
+BETTER_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Optional: Trusted origins for CORS
+BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000
+```
+
+Generate a secure secret for `BETTER_AUTH_SECRET`:
+```bash
+openssl rand -base64 32
+```
+
+3. **Set up the database:**
+
+Run database migrations:
+```bash
+pnpm db:push
+```
+
+4. **Run the development server:**
+```bash
 pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Authentication
+
+This project uses [Better Auth](https://www.better-auth.com) for authentication. The setup includes:
+
+- Email/Password authentication
+- Session management
+- Protected routes
+
+### Auth Files
+
+- `src/lib/auth.ts` - Server-side auth configuration
+- `src/lib/auth-client.ts` - Client-side auth utilities
+- `src/lib/auth-server.ts` - Server-side auth helpers
+- `src/app/api/auth/[...all]/route.ts` - Auth API routes
+- `src/app/sign-in/page.tsx` - Sign in/Sign up page
+
+### Usage
+
+**Client-side:**
+```typescript
+import { useSession, signIn, signOut } from '@/lib/auth-client';
+
+// Get current session
+const { data: session } = useSession();
+
+// Sign in
+await signIn.email({ email, password });
+
+// Sign out
+await signOut();
+```
+
+**Server-side:**
+```typescript
+import { getSession } from '@/lib/auth-server';
+
+const session = await getSession();
+```
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
