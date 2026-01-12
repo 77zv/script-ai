@@ -10,6 +10,44 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Helper function to format timestamp (seconds to MM:SS format)
+function formatTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+// Format transcription as a script with timestamps
+function formatTranscriptionAsScript(transcriptionResponse: any): string {
+  // If response is a string (fallback), return as is
+  if (typeof transcriptionResponse === "string") {
+    return transcriptionResponse;
+  }
+
+  // If response has segments, format them as a script
+  if (transcriptionResponse.segments && Array.isArray(transcriptionResponse.segments)) {
+    const segments = transcriptionResponse.segments;
+    return segments
+      .map((segment: any) => {
+        const startTime = formatTimestamp(segment.start);
+        const text = segment.text.trim();
+        return `[${startTime}] ${text}`;
+      })
+      .join("\n\n");
+  }
+
+  // If response has text but no segments, return text with basic formatting
+  if (transcriptionResponse.text) {
+    // Split by sentences and add line breaks
+    return transcriptionResponse.text
+      .replace(/([.!?])\s+/g, "$1\n\n")
+      .trim();
+  }
+
+  // Fallback: return stringified response
+  return JSON.stringify(transcriptionResponse);
+}
+
 // GET - Fetch all video scripts for the current user
 export async function GET() {
   try {
@@ -94,10 +132,12 @@ export async function POST(request: NextRequest) {
         const transcriptionResponse = await openai.audio.transcriptions.create({
           file: openAIFile,
           model: "whisper-1",
-          response_format: "text",
+          response_format: "verbose_json",
+          timestamp_granularities: ["segment"],
         });
 
-        transcription = transcriptionResponse as unknown as string;
+        // Format transcription as a script with timestamps
+        transcription = formatTranscriptionAsScript(transcriptionResponse);
 
         // Update the script with transcription
         const updatedScript = await db
