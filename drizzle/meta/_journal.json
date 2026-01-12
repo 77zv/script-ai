@@ -8,6 +8,13 @@
       "when": 1764103257183,
       "tag": "0000_large_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1768259473088,
+      "tag": "0001_legal_puppet_master",
+      "breakpoints": true
     }
   ]
 }

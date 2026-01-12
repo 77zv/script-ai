@@ -47,6 +47,8 @@ Run database migrations:
 pnpm db:push
 ```
 
+**Note:** If you encounter a `TypeError: Cannot read properties of undefined (reading 'replace')` error when running `db:generate`, this is a known bug in drizzle-kit 0.31.8. Use `db:push` instead, which syncs your schema without introspection.
+
 4. **Run the development server:**
 ```bash
 pnpm dev
