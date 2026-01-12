@@ -28,7 +28,7 @@ function formatTranscriptionAsScript(transcriptionResponse: any): string {
   if (transcriptionResponse.segments && Array.isArray(transcriptionResponse.segments)) {
     const segments = transcriptionResponse.segments;
     return segments
-      .map((segment: any) => {
+      .map((segment: { start: number; text: string }) => {
         const startTime = formatTimestamp(segment.start);
         const text = segment.text.trim();
         return `[${startTime}] ${text}`;

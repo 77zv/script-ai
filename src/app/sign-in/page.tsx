@@ -1,18 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { signIn, signUp } from "@/lib/auth-client";
+import { useState, useEffect } from "react";
+import { signIn, signUp, useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 export default function SignIn() {
+    const { data: session, isPending } = useSession();
+    const router = useRouter();
     const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-    const router = useRouter();
+
+    // Redirect if already authenticated
+    useEffect(() => {
+        if (!isPending && session?.user) {
+            router.push("/dashboard");
+        }
+    }, [session, isPending, router]);
 
     const extractErrorMessage = (error: unknown): string => {
         if (error instanceof Error) {
@@ -110,6 +118,18 @@ export default function SignIn() {
             setLoading(false);
         }
     };
+
+    // Show loading state while checking authentication
+    if (isPending || session?.user) {
+        return (
+            <div className="flex items-center justify-center h-[calc(100vh-15vh)]">
+                <div className="text-center">
+                    <div className="w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-500">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full py-12 sm:py-16 lg:py-24">

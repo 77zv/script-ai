@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "@/lib/auth-client";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 interface VideoScript {
   id: string;
@@ -12,6 +14,10 @@ interface VideoScript {
 }
 
 export default function Dashboard() {
+  const { data: session, isPending } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [scripts, setScripts] = useState<VideoScript[]>([]);
   const [selectedScript, setSelectedScript] = useState<VideoScript | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -20,13 +26,41 @@ export default function Dashboard() {
   const [editedScript, setEditedScript] = useState("");
   const [transcriptionStatus, setTranscriptionStatus] = useState<string>("");
 
+  // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
-    fetchScripts();
-  }, []);
+    if (!isPending && !session?.user) {
+      router.push("/sign-in");
+    }
+  }, [session, isPending, router]);
+
+  // Reset selected script when reset param is present or when navigating to dashboard
+  useEffect(() => {
+    if (pathname === "/dashboard") {
+      const reset = searchParams.get("reset");
+      if (reset === "true") {
+        setSelectedScript(null);
+        setIsEditing(false);
+        setEditedScript("");
+        // Clean up the URL by removing the query parameter
+        router.replace("/dashboard");
+      }
+    }
+  }, [pathname, searchParams, router]);
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchScripts();
+    }
+  }, [session]);
 
   const fetchScripts = async () => {
     try {
       const response = await fetch("/api/videos");
+      if (response.status === 401) {
+        // Unauthorized - redirect to sign-in
+        router.push("/sign-in");
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         setScripts(data);
@@ -58,6 +92,11 @@ export default function Dashboard() {
         method: "POST",
         body: formData,
       });
+
+      if (response.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
 
       if (response.ok) {
         const newScript = await response.json();
@@ -146,6 +185,11 @@ export default function Dashboard() {
         }),
       });
 
+      if (response.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
+
       if (response.ok) {
         const updatedScript = await response.json();
         setScripts((prev) =>
@@ -171,6 +215,11 @@ export default function Dashboard() {
         method: "DELETE",
       });
 
+      if (response.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
+
       if (response.ok) {
         setScripts((prev) => prev.filter((s) => s.id !== id));
         if (selectedScript?.id === id) {
@@ -182,6 +231,18 @@ export default function Dashboard() {
       alert("Failed to delete script");
     }
   };
+
+  // Show loading state while checking authentication
+  if (isPending || !session?.user) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-15vh)]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex -mx-[10%] w-[calc(100%+20%)] h-[calc(100vh-15vh)] gap-4 p-4">

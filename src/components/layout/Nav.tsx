@@ -2,9 +2,21 @@
 
 import Link from 'next/link';
 import { useSession, signOut } from '@/lib/auth-client';
+import { useRouter, usePathname } from 'next/navigation';
 
 export default function Nav() {
   const { data: session, isPending } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const handleDashboardClick = (e: React.MouseEvent) => {
+    if (pathname === '/dashboard') {
+      // If already on dashboard, navigate with reset param to trigger state reset
+      e.preventDefault();
+      router.push('/dashboard?reset=true');
+    }
+    // Otherwise, let the Link handle navigation normally
+  };
 
   return (
     <nav className="w-full bg-transparent pt-[1vh] pb-6">
@@ -26,6 +38,7 @@ export default function Nav() {
               </button>
               <Link 
                 href="/dashboard"
+                onClick={handleDashboardClick}
                 className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-opacity"
               >
                 Dashboard
@@ -41,6 +54,7 @@ export default function Nav() {
               </Link>
               <Link 
                 href="/dashboard"
+                onClick={handleDashboardClick}
                 className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-opacity"
               >
                 Dashboard
