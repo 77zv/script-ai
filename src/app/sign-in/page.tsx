@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn, signUp } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function SignIn() {
     const [isSignUp, setIsSignUp] = useState(false);
@@ -40,7 +41,10 @@ export default function SignIn() {
     };
 
     return (
-        <div className="w-full max-w-md py-12 sm:py-16 lg:py-24">
+        <div className="w-full py-12 sm:py-16 lg:py-24">
+            <div className="flex flex-col lg:flex-row items-center lg:items-center justify-between gap-8 lg:gap-16">
+                {/* Form Section */}
+                <div className="w-full max-w-md lg:shrink-0">
                     <h1 className="text-2xl font-bold sm:text-3xl lg:text-4xl mb-8">
                         {isSignUp ? "Sign Up" : "Sign In"}
                     </h1>
@@ -111,6 +115,20 @@ export default function SignIn() {
                                 : "Don't have an account? Sign Up"}
                         </button>
                     </div>
+                </div>
+                
+                {/* Image Section */}
+                <div className="w-full lg:flex-1 flex items-center justify-center">
+                    <Image
+                        src="/bob-halftone-2.png"
+                        alt="Bob halftone"
+                        width={1200}
+                        height={1200}
+                        className="w-full max-w-xl lg:max-w-2xl h-auto rounded-4xl"
+                        priority
+                    />
+                </div>
+            </div>
         </div>
     );
 }
