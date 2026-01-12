@@ -14,9 +14,80 @@ export default function SignIn() {
     const [loading, setLoading] = useState(false);
     const router = useRouter();
 
+    const extractErrorMessage = (error: unknown): string => {
+        if (error instanceof Error) {
+            const message = error.message;
+            
+            // BetterAuth error messages
+            if (message.includes("password")) {
+                if (message.includes("short") || message.includes("minimum") || message.includes("length")) {
+                    return "Password must be at least 8 characters long";
+                }
+                if (message.includes("weak") || message.includes("strength")) {
+                    return "Password is too weak. Please use a stronger password";
+                }
+                if (message.includes("invalid") || message.includes("incorrect")) {
+                    return "Invalid password";
+                }
+            }
+            
+            if (message.includes("email")) {
+                if (message.includes("invalid") || message.includes("format")) {
+                    return "Please enter a valid email address";
+                }
+                if (message.includes("exists") || message.includes("already")) {
+                    return "An account with this email already exists";
+                }
+                if (message.includes("not found") || message.includes("doesn't exist")) {
+                    return "No account found with this email address";
+                }
+            }
+            
+            if (message.includes("name") || message.includes("username")) {
+                if (message.includes("required")) {
+                    return "Name is required";
+                }
+            }
+            
+            // Return the original message if it's user-friendly, otherwise provide a generic one
+            if (message.length > 0 && message.length < 200) {
+                return message;
+            }
+        }
+        
+        return "An error occurred. Please try again.";
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+        
+        // Client-side validation
+        if (isSignUp && !name.trim()) {
+            setError("Name is required");
+            return;
+        }
+        
+        if (!email.trim()) {
+            setError("Email is required");
+            return;
+        }
+        
+        if (!email.includes("@") || !email.includes(".")) {
+            setError("Please enter a valid email address");
+            return;
+        }
+        
+        if (!password) {
+            setError("Password is required");
+            return;
+        }
+        
+        if (isSignUp && password.length < 8) {
+            setError("Password must be at least 8 characters long");
+            return;
+        }
+        
         setLoading(true);
 
         try {
@@ -34,7 +105,7 @@ export default function SignIn() {
             }
             router.push("/dashboard");
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An error occurred");
+            setError(extractErrorMessage(err));
         } finally {
             setLoading(false);
         }
@@ -94,7 +165,9 @@ export default function SignIn() {
                             />
                         </div>
                         {error && (
-                            <div className="text-red-500 text-sm">{error}</div>
+                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                                {error}
+                            </div>
                         )}
                         <button
                             type="submit"
