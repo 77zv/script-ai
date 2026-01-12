@@ -30,6 +30,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Optional: Trusted origins for CORS
 BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000
+
+# OpenAI API (required for video transcription)
+OPENAI_API_KEY=your-openai-api-key-here
 ```
 
 Generate a secure secret for `BETTER_AUTH_SECRET`:
