@@ -19,10 +19,30 @@ export default function Dashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedScript, setEditedScript] = useState("");
   const [transcriptionStatus, setTranscriptionStatus] = useState<string>("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
 
   useEffect(() => {
     fetchScripts();
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (openMenuId && !target.closest(`[data-menu-id="${openMenuId}"]`)) {
+        setOpenMenuId(null);
+      }
+    };
+
+    if (openMenuId) {
+      // Use setTimeout to avoid immediate closure
+      setTimeout(() => {
+        document.addEventListener("click", handleClickOutside);
+      }, 0);
+      return () => document.removeEventListener("click", handleClickOutside);
+    }
+  }, [openMenuId]);
 
   const fetchScripts = async () => {
     try {
@@ -164,6 +184,7 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (id: string) => {
+    setOpenMenuId(null);
     if (!confirm("Are you sure you want to delete this script?")) return;
 
     try {
@@ -180,6 +201,53 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error deleting script:", error);
       alert("Failed to delete script");
+    }
+  };
+
+  const handleStartRename = (script: VideoScript) => {
+    setOpenMenuId(null);
+    setRenamingId(script.id);
+    setNewName(script.name);
+  };
+
+  const handleCancelRename = () => {
+    setRenamingId(null);
+    setNewName("");
+  };
+
+  const handleSaveRename = async (id: string) => {
+    if (!newName.trim()) {
+      alert("Name cannot be empty");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/videos/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        const updatedScript = await response.json();
+        setScripts((prev) =>
+          prev.map((s) => (s.id === updatedScript.id ? updatedScript : s))
+        );
+        if (selectedScript?.id === id) {
+          setSelectedScript(updatedScript);
+        }
+        setRenamingId(null);
+        setNewName("");
+      } else {
+        alert("Failed to rename script");
+      }
+    } catch (error) {
+      console.error("Error renaming script:", error);
+      alert("Failed to rename script");
     }
   };
 
@@ -470,32 +538,102 @@ export default function Dashboard() {
 
           {/* Script List */}
           {scripts.length > 0 && (
-            <div className="space-y-2">
+            <div className="grid grid-cols-4 gap-3">
               {scripts.map((script) => (
                 <div
                   key={script.id}
-                  onClick={() => setSelectedScript(script)}
-                  className="p-3 rounded-[16px] cursor-pointer transition-all bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm"
+                  className="aspect-rectangle p-8 rounded-[12px] bg-white border border-gray-300 hover:border-gray-300 hover:shadow-sm transition-all relative flex items-end justify-center"
                 >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate text-gray-900">{script.name}</h3>
-                        <p className="text-xs mt-1 text-[#666]">
-                          {new Date(script.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(script.id);
-                        }}
-                        className="ml-2 text-xs px-2 py-1 rounded-[16px] bg-red-100 hover:bg-red-200 text-red-600 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                  {/* Circle Icon Container - Left */}
+                  <div className="absolute left-2 top-4 w-14">
+                    <div className="w-10 h-10 rounded-full bg-gray-300"></div>
                   </div>
-                ))}
+
+                  {/* Three Dots Menu - Right */}
+                  <div className="absolute right-2 top-2" data-menu-id={script.id}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === script.id ? null : script.id);
+                      }}
+                      className="flex flex-col gap-0.5 p-0.5 hover:bg-gray-100 rounded"
+                    >
+                      <div className="w-1 h-1 rounded-full bg-gray-500"></div>
+                      <div className="w-1 h-1 rounded-full bg-gray-500"></div>
+                      <div className="w-1 h-1 rounded-full bg-gray-500"></div>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {openMenuId === script.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-6 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[100px] overflow-hidden"
+                      >
+                        <button
+                          onClick={() => handleStartRename(script)}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 border-b border-gray-100"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          onClick={() => handleDelete(script.id)}
+                          className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Name - Bottom Center */}
+                  <div
+                    onClick={() => setSelectedScript(script)}
+                    className="absolute bottom-2 left-14 right-8 cursor-pointer text-center px-2"
+                  >
+                    {renamingId === script.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleSaveRename(script.id);
+                            } else if (e.key === "Escape") {
+                              handleCancelRename();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 min-w-0 text-sm px-2 py-0.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-black"
+                          autoFocus
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSaveRename(script.id);
+                          }}
+                          className="text-sm px-1.5 py-0.5 bg-black text-white rounded"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCancelRename();
+                          }}
+                          className="text-sm px-1.5 py-0.5 bg-gray-200 rounded"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-900 truncate">
+                        {script.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
