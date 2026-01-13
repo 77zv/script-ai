@@ -3,6 +3,10 @@ import { getSession } from "@/lib/auth-server";
 import { db } from "@/db";
 import { backboardProfile, type BackboardAnswers } from "@/db/schema/backboard-schema";
 import { eq } from "drizzle-orm";
+import {
+  getOrCreateAssistant,
+  indexBackboardProfile,
+} from "@/lib/backboard-client";
 
 // GET - Fetch user's backboard profile
 export async function GET() {
@@ -67,7 +71,40 @@ export async function POST(request: NextRequest) {
         .where(eq(backboardProfile.userId, session.user.id))
         .returning();
 
-      return NextResponse.json({ profile: updated[0] });
+      // Index updated profile in backboard.io vector DB
+      try {
+        // Use existing assistantId if available, otherwise create new one
+        let assistantId = updated[0].assistantId;
+        if (!assistantId) {
+          assistantId = await getOrCreateAssistant(session.user.id);
+        }
+        
+        const memoryIds = await indexBackboardProfile(
+          assistantId,
+          answers as Record<string, unknown>,
+          updated[0].memoryIds || undefined
+        );
+        
+        // Update profile with assistant ID and memory IDs
+        await db
+          .update(backboardProfile)
+          .set({
+            assistantId,
+            memoryIds,
+          })
+          .where(eq(backboardProfile.userId, session.user.id));
+      } catch (error) {
+        console.error("Error indexing profile in backboard.io:", error);
+        // Continue even if indexing fails
+      }
+
+      const finalProfile = await db
+        .select()
+        .from(backboardProfile)
+        .where(eq(backboardProfile.userId, session.user.id))
+        .limit(1);
+
+      return NextResponse.json({ profile: finalProfile[0] });
     } else {
       // Create new profile
       const id = crypto.randomUUID();
@@ -80,7 +117,34 @@ export async function POST(request: NextRequest) {
         })
         .returning();
 
-      return NextResponse.json({ profile: newProfile[0] }, { status: 201 });
+      // Index new profile in backboard.io vector DB
+      try {
+        const assistantId = await getOrCreateAssistant(session.user.id);
+        const memoryIds = await indexBackboardProfile(
+          assistantId,
+          answers as Record<string, unknown>
+        );
+        
+        // Update profile with assistant ID and memory IDs
+        await db
+          .update(backboardProfile)
+          .set({
+            assistantId,
+            memoryIds,
+          })
+          .where(eq(backboardProfile.id, id));
+      } catch (error) {
+        console.error("Error indexing profile in backboard.io:", error);
+        // Continue even if indexing fails
+      }
+
+      const finalProfile = await db
+        .select()
+        .from(backboardProfile)
+        .where(eq(backboardProfile.id, id))
+        .limit(1);
+
+      return NextResponse.json({ profile: finalProfile[0] }, { status: 201 });
     }
   } catch (error) {
     console.error("Error saving backboard profile:", error);

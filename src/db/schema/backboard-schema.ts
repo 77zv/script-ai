@@ -92,6 +92,8 @@ export const backboardProfile = pgTable(
       .references(() => user.id, { onDelete: "cascade" })
       .unique(),
     answers: jsonb("answers").$type<BackboardAnswers>().notNull(),
+    assistantId: text("assistant_id"), // Store backboard.io assistant ID
+    memoryIds: jsonb("memory_ids").$type<string[]>(), // Store memory IDs for cleanup
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

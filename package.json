@@ -13,6 +13,7 @@
     "test:api": "tsx scripts/test-api.ts"
   },
   "dependencies": {
+    "backboard-sdk": "^1.4.6",
     "better-auth": "^1.4.10",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",

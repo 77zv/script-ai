@@ -6,6 +6,10 @@ import { backboardProfile, type BackboardAnswers } from "@/db/schema/backboard-s
 import { eq, desc } from "drizzle-orm";
 import OpenAI from "openai";
 import { toFile } from "openai";
+import {
+  getOrCreateThread,
+  repurposeScriptWithRAG,
+} from "@/lib/backboard-client";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -91,8 +95,83 @@ function formatSegmentsToScript(segments: Array<{ timestamp?: string; text: stri
     .join("\n\n");
 }
 
-// Generate repurposed script based on backboard profile (line-by-line with minimal changes)
+// Generate repurposed script using backboard.io RAG (line-by-line with minimal changes)
 async function generateRepurposedScript(
+  originalScript: string,
+  backboardAnswers: BackboardAnswers,
+  userId: string,
+  assistantId: string
+): Promise<string> {
+  try {
+    // Check if backboard.io is configured
+    if (!process.env.BACKBOARD_API_KEY) {
+      console.warn("BACKBOARD_API_KEY not configured, falling back to simple repurposing");
+      return generateRepurposedScriptFallback(originalScript, backboardAnswers);
+    }
+
+    // Use provided assistantId and get/create thread
+    const threadId = await getOrCreateThread(assistantId, userId);
+    
+    // Parse script into segments
+    const segments = parseScriptSegments(originalScript);
+    
+    if (segments.length === 0) {
+      return originalScript;
+    }
+    
+    // Process segments one by one using RAG
+    const repurposedSegments: Array<{ timestamp?: string; text: string }> = [];
+    
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      
+      try {
+        // Build segment text with timestamp if present
+        const segmentText = segment.timestamp 
+          ? `[${segment.timestamp}] ${segment.text}`
+          : segment.text;
+        
+        // Use RAG to repurpose this segment
+        const repurposedText = await repurposeScriptWithRAG(
+          threadId,
+          assistantId,
+          segmentText,
+          i + 1,
+          segments.length
+        );
+        
+        // Parse the repurposed text to extract timestamp if present
+        const timestampMatch = repurposedText.match(/^\[(\d+:\d+)\]\s*(.+)$/);
+        if (timestampMatch) {
+          repurposedSegments.push({
+            timestamp: timestampMatch[1],
+            text: timestampMatch[2].trim(),
+          });
+        } else {
+          // No timestamp in repurposed, use original timestamp if it had one
+          repurposedSegments.push({
+            timestamp: segment.timestamp,
+            text: repurposedText.trim(),
+          });
+        }
+      } catch (error) {
+        console.error(`Error repurposing segment ${i + 1}:`, error);
+        // Fallback to original segment if RAG fails
+        repurposedSegments.push(segment);
+      }
+    }
+    
+    // Format back to script
+    return formatSegmentsToScript(repurposedSegments);
+  } catch (error) {
+    console.error("Error generating repurposed script with RAG:", error);
+    // Fallback to simple repurposing if RAG fails
+    return generateRepurposedScriptFallback(originalScript, backboardAnswers);
+  }
+}
+
+// Fallback function using simple prompt-based repurposing (original method)
+async function generateRepurposedScriptFallback(
   originalScript: string,
   backboardAnswers: BackboardAnswers
 ): Promise<string> {
@@ -107,14 +186,13 @@ async function generateRepurposedScript(
       return originalScript;
     }
     
-    // Process segments in batches to avoid token limits and maintain context
-    const batchSize = 10; // Process 10 segments at a time
+    // Process segments in batches
+    const batchSize = 10;
     const repurposedSegments: Array<{ timestamp?: string; text: string }> = [];
     
     for (let i = 0; i < segments.length; i += batchSize) {
       const batch = segments.slice(i, i + batchSize);
       
-      // Build batch context
       const batchText = batch
         .map((seg, idx) => {
           const num = i + idx + 1;
@@ -149,7 +227,7 @@ Return the repurposed segments in this exact format:
 ...`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: process.env.BACKBOARD_MODEL_NAME || "gpt-4o",
         messages: [
           {
             role: "system",
@@ -160,7 +238,7 @@ Return the repurposed segments in this exact format:
             content: prompt,
           },
         ],
-        temperature: 0.3, // Lower temperature for more consistent, minimal changes
+        temperature: 0.3,
         max_tokens: 2000,
       });
 
@@ -172,7 +250,6 @@ Return the repurposed segments in this exact format:
         const line = repurposedLines[j].trim();
         if (!line) continue;
         
-        // Extract segment number and content
         const match = line.match(/^\d+\.\s*(?:\[(\d+:\d+)\]\s*)?(.+)$/);
         if (match) {
           repurposedSegments.push({
@@ -180,7 +257,6 @@ Return the repurposed segments in this exact format:
             text: match[2].trim(),
           });
         } else {
-          // Fallback: try to preserve timestamp if present
           const timestampMatch = line.match(/^\[(\d+:\d+)\]\s*(.+)$/);
           if (timestampMatch) {
             repurposedSegments.push({
@@ -188,7 +264,6 @@ Return the repurposed segments in this exact format:
               text: timestampMatch[2].trim(),
             });
           } else {
-            // No timestamp, use original segment's timestamp if it had one
             repurposedSegments.push({
               timestamp: batch[j].timestamp,
               text: line,
@@ -197,7 +272,7 @@ Return the repurposed segments in this exact format:
         }
       }
       
-      // If we didn't get enough segments back, use originals as fallback
+      // Fallback to originals if needed
       while (repurposedSegments.length < i + batch.length) {
         const originalIdx = repurposedSegments.length;
         if (originalIdx < segments.length) {
@@ -206,11 +281,9 @@ Return the repurposed segments in this exact format:
       }
     }
     
-    // Format back to script
     return formatSegmentsToScript(repurposedSegments);
   } catch (error) {
-    console.error("Error generating repurposed script:", error);
-    // Return original script if repurposing fails
+    console.error("Error in fallback repurposing:", error);
     return originalScript;
   }
 }
@@ -418,9 +491,19 @@ export async function POST(request: NextRequest) {
             .where(eq(backboardProfile.userId, session.user.id))
             .limit(1);
 
-          if (profile.length > 0 && profile[0].answers) {
-            // Generate repurposed script based on backboard profile
+          if (profile.length > 0 && profile[0].answers && profile[0].assistantId) {
+            // Generate repurposed script using backboard.io RAG
+            // Only proceed if assistantId exists (profile has been indexed)
             repurposedScript = await generateRepurposedScript(
+              transcription,
+              profile[0].answers,
+              session.user.id,
+              profile[0].assistantId
+            );
+          } else if (profile.length > 0 && profile[0].answers) {
+            // Profile exists but not indexed yet - use fallback
+            console.warn("Profile exists but not indexed in backboard.io, using fallback");
+            repurposedScript = await generateRepurposedScriptFallback(
               transcription,
               profile[0].answers
             );
