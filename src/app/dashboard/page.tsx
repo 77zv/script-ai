@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 interface VideoScript {
   id: string;
   name: string;
   script: string | null;
+  repurposedScript: string | null;
   userId: string;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -25,6 +27,8 @@ export default function Dashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedScript, setEditedScript] = useState("");
   const [transcriptionStatus, setTranscriptionStatus] = useState<string>("");
+  const [showRepurposed, setShowRepurposed] = useState(false);
+  const [hasBackboardProfile, setHasBackboardProfile] = useState<boolean | null>(null);
 
   // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
@@ -41,6 +45,7 @@ export default function Dashboard() {
         setSelectedScript(null);
         setIsEditing(false);
         setEditedScript("");
+        setShowRepurposed(false);
         // Clean up the URL by removing the query parameter
         router.replace("/dashboard");
       }
@@ -50,8 +55,21 @@ export default function Dashboard() {
   useEffect(() => {
     if (session?.user) {
       fetchScripts();
+      checkBackboardProfile();
     }
   }, [session]);
+
+  const checkBackboardProfile = async () => {
+    try {
+      const response = await fetch("/api/backboard");
+      if (response.ok) {
+        const data = await response.json();
+        setHasBackboardProfile(!!data.profile);
+      }
+    } catch (error) {
+      console.error("Error checking backboard profile:", error);
+    }
+  };
 
   const fetchScripts = async () => {
     try {
@@ -152,7 +170,10 @@ export default function Dashboard() {
 
   const handleStartEdit = () => {
     if (selectedScript) {
-      setEditedScript(selectedScript.script || "");
+      const scriptToEdit = showRepurposed 
+        ? (selectedScript.repurposedScript || selectedScript.script || "")
+        : (selectedScript.script || "");
+      setEditedScript(scriptToEdit);
       setIsEditing(true);
     }
   };
@@ -166,14 +187,19 @@ export default function Dashboard() {
     if (!selectedScript) return;
 
     try {
+      const updateData: { script?: string; repurposedScript?: string } = {};
+      if (showRepurposed) {
+        updateData.repurposedScript = editedScript;
+      } else {
+        updateData.script = editedScript;
+      }
+
       const response = await fetch(`/api/videos/${selectedScript.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          script: editedScript,
-        }),
+        body: JSON.stringify(updateData),
       });
 
       if (response.status === 401) {
@@ -272,6 +298,48 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                
+                {/* Script Type Toggle */}
+                {selectedScript.repurposedScript && (
+                  <div className="mb-4 flex gap-2">
+                    <button
+                      onClick={() => setShowRepurposed(false)}
+                      className={`px-4 py-2 rounded-[12px] transition-colors ${
+                        !showRepurposed
+                          ? "bg-black text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Original
+                    </button>
+                    <button
+                      onClick={() => setShowRepurposed(true)}
+                      className={`px-4 py-2 rounded-[12px] transition-colors ${
+                        showRepurposed
+                          ? "bg-black text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Repurposed
+                    </button>
+                  </div>
+                )}
+                
+                {/* Onboarding prompt if no backboard profile */}
+                {!hasBackboardProfile && !selectedScript.repurposedScript && (
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-[12px]">
+                    <p className="text-sm text-blue-800 mb-2">
+                      Complete your backboard.io onboarding to get AI-repurposed scripts tailored to your voice and brand.
+                    </p>
+                    <Link
+                      href="/onboarding"
+                      className="text-sm text-blue-600 hover:text-blue-800 underline font-medium"
+                    >
+                      Complete Onboarding →
+                    </Link>
+                  </div>
+                )}
+
                 <div className="bg-gray-50 rounded-[12px] p-6 min-h-[400px]">
                   {isEditing ? (
                     <textarea
@@ -280,13 +348,22 @@ export default function Dashboard() {
                       className="w-full h-full min-h-[400px] bg-white border border-gray-300 rounded-[12px] p-4 focus:outline-none focus:ring-2 focus:ring-black resize-none font-mono text-sm"
                       placeholder="Enter your script here..."
                     />
-                  ) : selectedScript.script ? (
-                    <p className="whitespace-pre-wrap text-gray-800">
-                      {selectedScript.script}
-                    </p>
-                  ) : (
-                    <p className="text-gray-500 italic">No script content yet</p>
-                  )}
+                  ) : (() => {
+                    const scriptToShow = showRepurposed 
+                      ? (selectedScript.repurposedScript || selectedScript.script)
+                      : selectedScript.script;
+                    return scriptToShow ? (
+                      <p className="whitespace-pre-wrap text-gray-800">
+                        {scriptToShow}
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 italic">
+                        {showRepurposed 
+                          ? "No repurposed script available. Complete your backboard.io onboarding to get repurposed scripts."
+                          : "No script content yet"}
+                      </p>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

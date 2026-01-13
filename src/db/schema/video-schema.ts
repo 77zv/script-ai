@@ -7,7 +7,8 @@ export const videoScript = pgTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    script: text("script"),
+    script: text("script"), // Original transcript
+    repurposedScript: text("repurposed_script"), // Repurposed script based on backboard.io profile
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

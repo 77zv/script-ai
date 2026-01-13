@@ -51,9 +51,9 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { name, script } = body;
+    const { name, script, repurposedScript } = body;
 
-    const updateData: { name?: string; script?: string | null } = {};
+    const updateData: { name?: string; script?: string | null; repurposedScript?: string | null } = {};
     
     if (name !== undefined) {
       if (typeof name !== "string" || name.trim().length === 0) {
@@ -67,6 +67,10 @@ export async function PATCH(
 
     if (script !== undefined) {
       updateData.script = script || null;
+    }
+
+    if (repurposedScript !== undefined) {
+      updateData.repurposedScript = repurposedScript || null;
     }
 
     const updated = await db
