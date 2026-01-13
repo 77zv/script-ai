@@ -106,8 +106,6 @@ export default function Dashboard() {
         // Reset file input
         const fileInput = document.getElementById("video-upload-zone") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
-        const fileInputSidebar = document.getElementById("video-upload-sidebar") as HTMLInputElement;
-        if (fileInputSidebar) fileInputSidebar.value = "";
         // Clear status after a brief delay
         setTimeout(() => setTranscriptionStatus(""), 2000);
       } else {
@@ -150,13 +148,6 @@ export default function Dashboard() {
   const handleUploadZoneClick = () => {
     const fileInput = document.getElementById("video-upload-zone") as HTMLInputElement;
     if (fileInput) fileInput.click();
-  };
-
-  const handleSidebarFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith("video/")) {
-      await uploadVideo(file);
-    }
   };
 
   const handleStartEdit = () => {
@@ -247,81 +238,8 @@ export default function Dashboard() {
   return (
     <div className="flex -mx-[10%] w-[calc(100%+20%)] h-[calc(100vh-15vh)] gap-4 p-4">
       {selectedScript ? (
-        // Three-panel layout when script is selected
+        // Two-panel layout when script is selected (no My Scripts sidebar)
         <>
-          {/* Left Sidebar - Script List */}
-          <div className="w-80 rounded-[12px] border border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-gray-200">
-              <h2 className="text-xl font-medium mb-4">My Scripts</h2>
-              <label
-                htmlFor="video-upload-sidebar"
-                className={`w-full bg-black text-white py-2 px-4 rounded-[12px] hover:bg-gray-800 transition-colors cursor-pointer flex items-center justify-center ${
-                  isUploading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-              >
-                {isUploading 
-                  ? transcriptionStatus === "transcribing" 
-                    ? "Transcribing..." 
-                    : "Uploading..."
-                  : "+ Upload Video"}
-              </label>
-              <input
-                id="video-upload-sidebar"
-                type="file"
-                accept="video/*"
-                onChange={handleSidebarFileSelect}
-                className="hidden"
-                disabled={isUploading}
-              />
-            </div>
-
-            {/* Script List */}
-            <div className="flex-1 overflow-y-auto">
-              {scripts.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  <p>No scripts yet</p>
-                  <p className="text-sm mt-2">Upload a video to get started</p>
-                </div>
-              ) : (
-                <div className="p-2">
-                  {scripts.map((script) => (
-                    <div
-                      key={script.id}
-                      onClick={() => setSelectedScript(script)}
-                      className={`p-3 mb-2 rounded-[12px] cursor-pointer transition-all ${
-                        selectedScript?.id === script.id
-                          ? "bg-black text-white shadow-sm"
-                          : "bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium truncate">{script.name}</h3>
-                          <p className="text-xs mt-1 opacity-70">
-                            {new Date(script.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(script.id);
-                          }}
-                          className={`ml-2 text-xs px-2 py-1 rounded ${
-                            selectedScript?.id === script.id
-                              ? "bg-white/20 hover:bg-white/30 text-white"
-                              : "bg-red-100 hover:bg-red-200 text-red-600"
-                          }`}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col rounded-[12px] border border-gray-200 bg-white overflow-hidden shadow-sm">
             <div className="flex-1 p-8 overflow-y-auto">
