@@ -29,6 +29,9 @@ export default function Dashboard() {
   const [transcriptionStatus, setTranscriptionStatus] = useState<string>("");
   const [showRepurposed, setShowRepurposed] = useState(false);
   const [hasBackboardProfile, setHasBackboardProfile] = useState<boolean | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
 
   // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
@@ -248,6 +251,42 @@ export default function Dashboard() {
       console.error("Error deleting script:", error);
       alert("Failed to delete script");
     }
+  };
+
+  const handleStartRename = (script: VideoScript) => {
+    setOpenMenuId(null);
+    setRenamingId(script.id);
+    setNewName(script.name);
+  };
+
+  const handleSaveRename = async (id: string) => {
+    if (!newName.trim()) return;
+
+    try {
+      const response = await fetch(`/api/videos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+
+      if (response.ok) {
+        setScripts((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, name: newName.trim() } : s))
+        );
+        if (selectedScript?.id === id) {
+          setSelectedScript({ ...selectedScript, name: newName.trim() });
+        }
+        setRenamingId(null);
+        setNewName("");
+      }
+    } catch (error) {
+      console.error("Error renaming script:", error);
+    }
+  };
+
+  const handleCancelRename = () => {
+    setRenamingId(null);
+    setNewName("");
   };
 
   // Show loading state while checking authentication
