@@ -54,31 +54,31 @@ export async function getOrCreateAssistant(userId: string): Promise<string> {
 }
 
 /**
- * Create or get a thread for a user
+ * Create a new thread for repurposing (fresh context for each video)
  */
-export async function getOrCreateThread(
-  assistantId: string,
-  userId: string
+export async function createNewThread(
+  assistantId: string
 ): Promise<string> {
   const backboardClient = getClient();
 
   try {
-    // List existing threads
-    const threads = await backboardClient.listThreads(assistantId);
-    
-    // Find thread for this user (you might want to store thread IDs in your DB)
-    // For now, we'll create a new thread each time or reuse the first one
-    if (threads.length > 0) {
-      return threads[0].threadId;
-    }
-
-    // Create new thread
+    // Always create a new thread for each video to avoid context pollution
     const thread = await backboardClient.createThread(assistantId);
     return thread.threadId;
   } catch (error) {
-    console.error("Error getting/creating thread:", error);
+    console.error("Error creating thread:", error);
     throw error;
   }
+}
+
+/**
+ * Create or get a thread for a user (for general use)
+ */
+export async function getOrCreateThread(
+  assistantId: string
+): Promise<string> {
+  // For repurposing, we want a fresh thread each time
+  return createNewThread(assistantId);
 }
 
 /**
@@ -154,10 +154,12 @@ function buildProfileChunks(profileData: Record<string, unknown>): Array<{
     
     if (bio || building || remember) {
       chunks.push({
-        content: `WHO YOU ARE:
-Bio: ${bio || "Not provided"}
-What you're building: ${building || "Not provided"}
-What you want to be remembered for: ${remember || "Not provided"}`,
+        content: `WHO YOU ARE - BACKGROUND AND FIELD:
+Bio (age, location, current role/field): ${bio || "Not provided"}
+What you're building/working on: ${building || "Not provided"}
+What you want to be remembered for: ${remember || "Not provided"}
+
+IMPORTANT: Extract the creator's field/industry, university/education, and career path from the bio above. Use this information to replace any generic field references in scripts.`,
         metadata: { section: "whoYouAre", type: "profile" },
       });
     }
@@ -335,48 +337,66 @@ Recurring series ideas: ${series || "Not provided"}`,
   return chunks;
 }
 
+
 /**
- * Use RAG to repurpose a script segment using backboard.io
+ * Use RAG to repurpose a script line using backboard.io
  */
 export async function repurposeScriptWithRAG(
   threadId: string,
   assistantId: string,
-  scriptSegment: string,
-  segmentNumber: number,
-  totalSegments: number
+  scriptLine: string
 ): Promise<string> {
   const backboardClient = getClient();
 
-  try {
-    // Send message with memory enabled (RAG will automatically retrieve relevant context)
-    // Memory parameter: "auto" = search + write, "readonly" = search only, "off" = disabled
-    // Using "readonly" to only search memory, not write new memories during repurposing
-    const response = await backboardClient.addMessage(threadId, {
-      content: `You are repurposing a video script segment to match the creator's unique voice and style. The system has automatically retrieved relevant information from the creator's profile using RAG (Retrieval-Augmented Generation). Use that retrieved context to adapt this segment.
+  const response = await backboardClient.addMessage(threadId, {
+    content: `Repurpose this line to match the creator's actual background and field. Make MINIMAL changes - keep the same length, tone, style, and structure. Only replace generic references with the creator's specific details.
 
-ORIGINAL SEGMENT:
-${scriptSegment}
+ORIGINAL LINE:
+${scriptLine}
 
-INSTRUCTIONS:
-1. Use the retrieved profile context from memory to understand the creator's voice, style, audience, and preferences
-2. Make MINIMAL changes - only adapt tone, word choice, examples, or phrasing to match their profile
-3. Keep the EXACT same meaning and core message
-4. Preserve timestamps if present [MM:SS]
-5. If the segment doesn't need changes based on the profile, return it as-is
-6. Respect their red lines (words/phrases to avoid) from their preferences
-7. Match their communication style (formality, emojis, swearing, etc.) from their voice profile
-8. Consider their target audience and what they want people to do
+CRITICAL RULES - PRESERVE STYLE AND LENGTH:
+1. Keep the EXACT same length - don't add extra words or details
+2. Keep the EXACT same tone and style - match the original's energy and pacing
+3. Keep the EXACT same structure - don't rearrange or add clauses
+4. Only replace generic references with creator's specific details
+5. Preserve timestamps if present [MM:SS] exactly as shown
 
-The retrieved context from the creator's profile should guide your repurposing. Return ONLY the repurposed segment, nothing else.`,
+WHAT TO REPLACE (only if present):
+- Industry/field references (e.g., "investment banking", "consulting") → Creator's actual field
+- University names → Creator's actual university
+- Majors/degrees → Creator's actual major/background
+- Job titles/career paths → Creator's actual career path
+
+WHAT NOT TO DO:
+- DO NOT add extra details, examples, or explanations
+- DO NOT change the tone (formal/informal, energetic/calm, etc.)
+- DO NOT make the line longer
+- DO NOT add clauses like "especially when..." or "especially if..."
+- DO NOT change the sentence structure
+
+EXAMPLES:
+Original: "I'm a finance student at McGill"
+Repurposed (if creator is CS at Queens): "I'm a computer science student at Queens University"
+✓ Same length, same tone, only replaced the details
+
+Original: "I don't know who needs to hear this, but college is not real life."
+Repurposed: "I don't know who needs to hear this, but college is not real life."
+✓ No changes needed - no generic references to replace
+
+Original: "I landed a consulting internship"
+Repurposed (if creator is in tech): "I landed a software engineering internship"
+✓ Same length, same tone, only replaced the field
+
+CRITICAL OUTPUT FORMAT:
+- Return ONLY the repurposed line text
+- If timestamp is present in original, include it: [MM:SS] repurposed text
+- Keep it the SAME LENGTH and SAME TONE as the original
+- Do NOT add extra words or details`,
       llm_provider: process.env.BACKBOARD_LLM_PROVIDER || "openai",
       model_name: process.env.BACKBOARD_MODEL_NAME || "gpt-4o",
       // Enable memory (RAG) - this will automatically retrieve relevant profile context
       memory: "readonly", // readonly = search only (don't write new memories during repurposing)
     });
 
-    return response.content.trim();
-  } catch (error) {
-    console.error("Error repurposing with RAG:", error);
-    throw error;
-  }
+  return response.content.trim();
 }

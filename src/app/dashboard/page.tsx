@@ -353,9 +353,26 @@ export default function Dashboard() {
                       ? (selectedScript.repurposedScript || selectedScript.script)
                       : selectedScript.script;
                     return scriptToShow ? (
-                      <p className="whitespace-pre-wrap text-gray-800">
-                        {scriptToShow}
-                      </p>
+                      <div className="whitespace-pre-wrap text-gray-800">
+                        {scriptToShow.split('\n\n').map((paragraph, idx) => {
+                          const needsManualInput = paragraph.includes('[⚠️ NO PROFILE INFORMATION AVAILABLE');
+                          if (needsManualInput) {
+                            const [text, warning] = paragraph.split('[⚠️');
+                            return (
+                              <div key={idx} className="mb-4">
+                                <p className="mb-2">{text.trim()}</p>
+                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm">
+                                  <p className="text-yellow-800 font-medium">⚠️ Manual Input Needed</p>
+                                  <p className="text-yellow-700 mt-1">
+                                    No profile information available for this segment. Please manually adapt it to match your voice and style.
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return <p key={idx} className="mb-2">{paragraph}</p>;
+                        })}
+                      </div>
                     ) : (
                       <p className="text-gray-500 italic">
                         {showRepurposed 
