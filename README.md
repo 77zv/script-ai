@@ -33,6 +33,12 @@ BETTER_AUTH_TRUSTED_ORIGINS=http://localhost:3000
 
 # OpenAI API (required for video transcription)
 OPENAI_API_KEY=your-openai-api-key-here
+
+# Backboard.io API (optional, for RAG and vector database)
+BACKBOARD_API_KEY=your-backboard-api-key-here
+BACKBOARD_API_URL=https://app.backboard.io/api
+BACKBOARD_LLM_PROVIDER=openai  # Optional: LLM provider (default: openai)
+BACKBOARD_MODEL_NAME=gpt-4o    # Optional: Model name (default: gpt-4o)
 ```
 
 Generate a secure secret for `BETTER_AUTH_SECRET`:
@@ -94,6 +100,44 @@ import { getSession } from '@/lib/auth-server';
 
 const session = await getSession();
 ```
+
+## Backboard.io Integration (RAG & Vector Database)
+
+This project integrates with [Backboard.io](https://backboard.io) using their official [SDK](https://app.backboard.io/quickstart) for advanced RAG (Retrieval-Augmented Generation) and vector database capabilities. This enables:
+
+- **Semantic Search**: Automatically retrieves relevant profile sections for each script segment
+- **Vector Database**: Stores backboard profile data as memory/embeddings for efficient retrieval
+- **Minimal Changes**: Only uses relevant context, making more precise repurposing
+- **Scalability**: Handles large profiles efficiently with hybrid search (BM25 + vector)
+- **Persistent Memory**: Profile data persists across conversations
+
+### Setup
+
+1. Sign up for [Backboard.io](https://backboard.io) and get your API key from the [quickstart guide](https://app.backboard.io/quickstart)
+2. Add `BACKBOARD_API_KEY` to your `.env` file
+3. The SDK is already installed (`backboard-sdk` package)
+4. The system will automatically:
+   - Create an assistant for each user
+   - Index their backboard profile data as memory
+   - Use RAG for script repurposing
+
+### How It Works
+
+1. **Profile Indexing**: When a user completes onboarding, their profile is chunked by section and added as memory to their assistant in backboard.io
+2. **RAG Retrieval**: For each script segment, the system uses backboard.io's memory feature with `memory: "auto"` mode, which automatically performs semantic search to find the most relevant profile sections
+3. **Contextual Repurposing**: Only the relevant context is retrieved and used, making the repurposing more accurate and minimal
+
+### SDK Usage
+
+The integration uses the official `backboard-sdk` package:
+- **Assistants**: Each user gets their own assistant to store their profile
+- **Memory**: Profile sections are stored as memory chunks for semantic retrieval
+- **Threads**: Conversation threads are used for script repurposing with RAG enabled
+- **Memory Modes**: Uses "auto" mode which enables both search (retrieval) and write (storage)
+
+### Fallback
+
+If `BACKBOARD_API_KEY` is not configured, the system falls back to a simple prompt-based approach that includes all profile data in the context.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

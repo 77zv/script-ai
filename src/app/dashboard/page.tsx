@@ -1,17 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "@/lib/auth-client";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 interface VideoScript {
   id: string;
   name: string;
   script: string | null;
+  repurposedScript: string | null;
   userId: string;
   createdAt: Date | string;
   updatedAt: Date | string;
 }
 
 export default function Dashboard() {
+  const { data: session, isPending } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [scripts, setScripts] = useState<VideoScript[]>([]);
   const [selectedScript, setSelectedScript] = useState<VideoScript | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -19,34 +27,58 @@ export default function Dashboard() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedScript, setEditedScript] = useState("");
   const [transcriptionStatus, setTranscriptionStatus] = useState<string>("");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [newName, setNewName] = useState("");
+  const [showRepurposed, setShowRepurposed] = useState(false);
+  const [hasBackboardProfile, setHasBackboardProfile] = useState<boolean | null>(null);
 
+  // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
-    fetchScripts();
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (openMenuId && !target.closest(`[data-menu-id="${openMenuId}"]`)) {
-        setOpenMenuId(null);
-      }
-    };
-
-    if (openMenuId) {
-      // Use setTimeout to avoid immediate closure
-      setTimeout(() => {
-        document.addEventListener("click", handleClickOutside);
-      }, 0);
-      return () => document.removeEventListener("click", handleClickOutside);
+    if (!isPending && !session?.user) {
+      router.push("/sign-in");
     }
-  }, [openMenuId]);
+  }, [session, isPending, router]);
+
+  // Reset selected script when reset param is present or when navigating to dashboard
+  useEffect(() => {
+    if (pathname === "/dashboard") {
+      const reset = searchParams.get("reset");
+      if (reset === "true") {
+        setSelectedScript(null);
+        setIsEditing(false);
+        setEditedScript("");
+        setShowRepurposed(false);
+        // Clean up the URL by removing the query parameter
+        router.replace("/dashboard");
+      }
+    }
+  }, [pathname, searchParams, router]);
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchScripts();
+      checkBackboardProfile();
+    }
+  }, [session]);
+
+  const checkBackboardProfile = async () => {
+    try {
+      const response = await fetch("/api/backboard");
+      if (response.ok) {
+        const data = await response.json();
+        setHasBackboardProfile(!!data.profile);
+      }
+    } catch (error) {
+      console.error("Error checking backboard profile:", error);
+    }
+  };
 
   const fetchScripts = async () => {
     try {
       const response = await fetch("/api/videos");
+      if (response.status === 401) {
+        // Unauthorized - redirect to sign-in
+        router.push("/sign-in");
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         setScripts(data);
@@ -79,6 +111,11 @@ export default function Dashboard() {
         body: formData,
       });
 
+      if (response.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
+
       if (response.ok) {
         const newScript = await response.json();
         setScripts((prev) => [newScript, ...prev]);
@@ -87,8 +124,6 @@ export default function Dashboard() {
         // Reset file input
         const fileInput = document.getElementById("video-upload-zone") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
-        const fileInputSidebar = document.getElementById("video-upload-sidebar") as HTMLInputElement;
-        if (fileInputSidebar) fileInputSidebar.value = "";
         // Clear status after a brief delay
         setTimeout(() => setTranscriptionStatus(""), 2000);
       } else {
@@ -133,16 +168,12 @@ export default function Dashboard() {
     if (fileInput) fileInput.click();
   };
 
-  const handleSidebarFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith("video/")) {
-      await uploadVideo(file);
-    }
-  };
-
   const handleStartEdit = () => {
     if (selectedScript) {
-      setEditedScript(selectedScript.script || "");
+      const scriptToEdit = showRepurposed 
+        ? (selectedScript.repurposedScript || selectedScript.script || "")
+        : (selectedScript.script || "");
+      setEditedScript(scriptToEdit);
       setIsEditing(true);
     }
   };
@@ -156,15 +187,25 @@ export default function Dashboard() {
     if (!selectedScript) return;
 
     try {
+      const updateData: { script?: string; repurposedScript?: string } = {};
+      if (showRepurposed) {
+        updateData.repurposedScript = editedScript;
+      } else {
+        updateData.script = editedScript;
+      }
+
       const response = await fetch(`/api/videos/${selectedScript.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          script: editedScript,
-        }),
+        body: JSON.stringify(updateData),
       });
+
+      if (response.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
 
       if (response.ok) {
         const updatedScript = await response.json();
@@ -192,6 +233,11 @@ export default function Dashboard() {
         method: "DELETE",
       });
 
+      if (response.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
+
       if (response.ok) {
         setScripts((prev) => prev.filter((s) => s.id !== id));
         if (selectedScript?.id === id) {
@@ -204,131 +250,23 @@ export default function Dashboard() {
     }
   };
 
-  const handleStartRename = (script: VideoScript) => {
-    setOpenMenuId(null);
-    setRenamingId(script.id);
-    setNewName(script.name);
-  };
-
-  const handleCancelRename = () => {
-    setRenamingId(null);
-    setNewName("");
-  };
-
-  const handleSaveRename = async (id: string) => {
-    if (!newName.trim()) {
-      alert("Name cannot be empty");
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/videos/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: newName.trim(),
-        }),
-      });
-
-      if (response.ok) {
-        const updatedScript = await response.json();
-        setScripts((prev) =>
-          prev.map((s) => (s.id === updatedScript.id ? updatedScript : s))
-        );
-        if (selectedScript?.id === id) {
-          setSelectedScript(updatedScript);
-        }
-        setRenamingId(null);
-        setNewName("");
-      } else {
-        alert("Failed to rename script");
-      }
-    } catch (error) {
-      console.error("Error renaming script:", error);
-      alert("Failed to rename script");
-    }
-  };
+  // Show loading state while checking authentication
+  if (isPending || !session?.user) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-15vh)]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-gray-300 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex -mx-[10%] w-[calc(100%+20%)] h-[calc(100vh-15vh)] gap-4 p-4">
       {selectedScript ? (
-        // Three-panel layout when script is selected
+        // Two-panel layout when script is selected (no My Scripts sidebar)
         <>
-          {/* Left Sidebar - Script List */}
-          <div className="w-80 rounded-[12px] border border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-gray-200">
-              <h2 className="text-xl font-medium mb-4">My Scripts</h2>
-              <label
-                htmlFor="video-upload-sidebar"
-                className={`w-full bg-black text-white py-2 px-4 rounded-[12px] hover:bg-gray-800 transition-colors cursor-pointer flex items-center justify-center ${
-                  isUploading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-              >
-                {isUploading 
-                  ? transcriptionStatus === "transcribing" 
-                    ? "Transcribing..." 
-                    : "Uploading..."
-                  : "+ Upload Video"}
-              </label>
-              <input
-                id="video-upload-sidebar"
-                type="file"
-                accept="video/*"
-                onChange={handleSidebarFileSelect}
-                className="hidden"
-                disabled={isUploading}
-              />
-            </div>
-
-            {/* Script List */}
-            <div className="flex-1 overflow-y-auto">
-              {scripts.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  <p>No scripts yet</p>
-                  <p className="text-sm mt-2">Upload a video to get started</p>
-                </div>
-              ) : (
-                <div className="p-2">
-                  {scripts.map((script) => (
-                    <div
-                      key={script.id}
-                      onClick={() => setSelectedScript(script)}
-                      className={`p-3 mb-2 rounded-[12px] cursor-pointer transition-all ${
-                        selectedScript?.id === script.id
-                          ? "bg-black text-white shadow-sm"
-                          : "bg-white border border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-medium truncate">{script.name}</h3>
-                          <p className="text-xs mt-1 opacity-70">
-                            {new Date(script.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(script.id);
-                          }}
-                          className={`ml-2 text-xs px-2 py-1 rounded ${
-                            selectedScript?.id === script.id
-                              ? "bg-white/20 hover:bg-white/30 text-white"
-                              : "bg-red-100 hover:bg-red-200 text-red-600"
-                          }`}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col rounded-[12px] border border-gray-200 bg-white overflow-hidden shadow-sm">
             <div className="flex-1 p-8 overflow-y-auto">
@@ -361,6 +299,48 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+                
+                {/* Script Type Toggle */}
+                {selectedScript.repurposedScript && (
+                  <div className="mb-4 flex gap-2">
+                    <button
+                      onClick={() => setShowRepurposed(false)}
+                      className={`px-4 py-2 rounded-[12px] transition-colors ${
+                        !showRepurposed
+                          ? "bg-black text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Original
+                    </button>
+                    <button
+                      onClick={() => setShowRepurposed(true)}
+                      className={`px-4 py-2 rounded-[12px] transition-colors ${
+                        showRepurposed
+                          ? "bg-black text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Repurposed
+                    </button>
+                  </div>
+                )}
+                
+                {/* Onboarding prompt if no backboard profile */}
+                {!hasBackboardProfile && !selectedScript.repurposedScript && (
+                  <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-[12px]">
+                    <p className="text-sm text-blue-800 mb-2">
+                      Complete your backboard.io onboarding to get AI-repurposed scripts tailored to your voice and brand.
+                    </p>
+                    <Link
+                      href="/onboarding"
+                      className="text-sm text-blue-600 hover:text-blue-800 underline font-medium"
+                    >
+                      Complete Onboarding →
+                    </Link>
+                  </div>
+                )}
+
                 <div className="bg-gray-50 rounded-[12px] p-6 min-h-[400px]">
                   {isEditing ? (
                     <textarea
@@ -369,13 +349,22 @@ export default function Dashboard() {
                       className="w-full h-full min-h-[400px] bg-white border border-gray-300 rounded-[12px] p-4 focus:outline-none focus:ring-2 focus:ring-black resize-none font-mono text-sm"
                       placeholder="Enter your script here..."
                     />
-                  ) : selectedScript.script ? (
-                    <p className="whitespace-pre-wrap text-gray-800">
-                      {selectedScript.script}
-                    </p>
-                  ) : (
-                    <p className="text-gray-500 italic">No script content yet</p>
-                  )}
+                  ) : (() => {
+                    const scriptToShow = showRepurposed 
+                      ? (selectedScript.repurposedScript || selectedScript.script)
+                      : selectedScript.script;
+                    return scriptToShow ? (
+                      <p className="whitespace-pre-wrap text-gray-800">
+                        {scriptToShow}
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 italic">
+                        {showRepurposed 
+                          ? "No repurposed script available. Complete your backboard.io onboarding to get repurposed scripts."
+                          : "No script content yet"}
+                      </p>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

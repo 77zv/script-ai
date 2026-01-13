@@ -2,9 +2,46 @@
 
 import Link from 'next/link';
 import { useSession, signOut } from '@/lib/auth-client';
+import { useRouter, usePathname } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
 
 export default function Nav() {
   const { data: session, isPending } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleDashboardClick = (e: React.MouseEvent) => {
+    if (pathname === '/dashboard') {
+      // If already on dashboard, navigate with reset param to trigger state reset
+      e.preventDefault();
+      router.push('/dashboard?reset=true');
+    }
+    // Otherwise, let the Link handle navigation normally
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
+  const handleSignOut = () => {
+    setIsDropdownOpen(false);
+    signOut();
+  };
 
   return (
     <nav className="w-full bg-transparent pt-[1vh] pb-6">
@@ -17,15 +54,27 @@ export default function Nav() {
             <span className="text-sm text-gray-400">Loading...</span>
           ) : session?.user ? (
             <>
-              <span className="text-sm text-black">{session.user.name || session.user.email}</span>
-              <button 
-                onClick={() => signOut()}
-                className="text-sm text-black hover:opacity-70 transition-opacity"
-              >
-                Sign Out
-              </button>
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="text-sm text-black hover:opacity-70 transition-opacity cursor-pointer"
+                >
+                  {session.user.name || session.user.email}
+                </button>
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full text-left px-4 py-2 text-sm text-black hover:bg-gray-100 transition-colors rounded-md"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
               <Link 
                 href="/dashboard"
+                onClick={handleDashboardClick}
                 className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-opacity"
               >
                 Dashboard
@@ -41,6 +90,7 @@ export default function Nav() {
               </Link>
               <Link 
                 href="/dashboard"
+                onClick={handleDashboardClick}
                 className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-opacity"
               >
                 Dashboard
