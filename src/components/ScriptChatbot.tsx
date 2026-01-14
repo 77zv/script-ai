@@ -18,6 +18,7 @@ interface ScriptChatbotProps {
   onApplyChanges?: (newContent: string) => void;
   position?: "floating" | "embedded";
   autoOpen?: boolean;
+  onSendMessageRef?: (ref: { sendMessage: (message: string) => void; setInputValue: (value: string) => void }) => void;
 }
 
 const quickActions = [
@@ -34,6 +35,7 @@ export default function ScriptChatbot({
   onApplyChanges,
   position = "embedded",
   autoOpen = false,
+  onSendMessageRef,
 }: ScriptChatbotProps) {
   const [isOpen, setIsOpen] = useState(autoOpen);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -42,27 +44,62 @@ export default function ScriptChatbot({
   const [threadId, setThreadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Track if this is the initial load
+  const isInitialLoadRef = useRef(true);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom on initial load (without animation to avoid glitchy effect)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (threadId && messages.length > 0 && isInitialLoadRef.current && messagesContainerRef.current) {
+      // Scroll immediately to bottom without animation on initial load
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          isInitialLoadRef.current = false;
+        }
+      }, 100);
+    }
+  }, [threadId, messages.length]);
+
+  // Auto-scroll to bottom when new messages arrive (after initial load)
+  useEffect(() => {
+    if (!isInitialLoadRef.current && messagesContainerRef.current) {
+      // Use setTimeout to ensure DOM is updated
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+      }, 0);
+    }
   }, [messages, isTyping]);
 
   const initializeChat = useCallback(async () => {
     try {
       setError(null);
+      
+      // Ensure we have valid scriptContent
+      const contentToSend = scriptContent || "";
+      
       const response = await fetch("/api/chatbot/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scriptId, scriptContent }),
+        body: JSON.stringify({ scriptId, scriptContent: contentToSend }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to initialize chat");
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Chat initialization failed:", errorData);
+        throw new Error(errorData.error || `Failed to initialize chat (${response.status})`);
       }
 
       const data = await response.json();
+      
+      if (!data.threadId) {
+        throw new Error("No threadId received from server");
+      }
+      
       setThreadId(data.threadId);
 
       // Add initial greeting
@@ -87,7 +124,8 @@ What would you like to work on?`,
       setMessages([greeting]);
     } catch (err) {
       console.error("Error initializing chat:", err);
-      setError("Failed to initialize chat. Please try again.");
+      const errorMessage = err instanceof Error ? err.message : "Failed to initialize chat. Please try again.";
+      setError(errorMessage);
     }
   }, [scriptId, scriptContent]);
 
@@ -123,8 +161,65 @@ What would you like to work on?`,
     }
   }, [messages, threadId, scriptId, scriptContent]);
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim() || !threadId) return;
+  const sendMessage = useCallback(async (content: string) => {
+    if (!content.trim()) return;
+    
+    // If no threadId, initialize chat first
+    let currentThreadId = threadId;
+    if (!currentThreadId) {
+      try {
+        setError(null);
+        const contentToSend = scriptContent || "";
+        
+        const initResponse = await fetch("/api/chatbot/init", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scriptId, scriptContent: contentToSend }),
+        });
+
+        if (!initResponse.ok) {
+          const errorData = await initResponse.json().catch(() => ({ error: "Unknown error" }));
+          console.error("Chat initialization failed:", errorData);
+          throw new Error(errorData.error || `Failed to initialize chat (${initResponse.status})`);
+        }
+
+        const initData = await initResponse.json();
+        
+        if (!initData.threadId) {
+          throw new Error("No threadId received from server");
+        }
+        
+        currentThreadId = initData.threadId;
+        setThreadId(currentThreadId);
+
+        // Add initial greeting if no messages exist
+        if (messages.length === 0) {
+          const greeting: Message = {
+            id: `greeting-${Date.now()}`,
+            role: "assistant",
+            content: `Hi! 👋 I'm ScriptBot, your video script assistant. I can help you:
+- Make your script more engaging
+- Shorten or expand sections
+- Improve hooks and CTAs
+- Add structure and timing
+
+What would you like to work on?`,
+            timestamp: new Date(),
+            actionButtons: quickActions.map((qa) => ({
+              label: qa.label,
+              action: qa.action,
+              emoji: qa.emoji,
+            })),
+          };
+          setMessages([greeting]);
+        }
+      } catch (err) {
+        console.error("Error initializing chat:", err);
+        const errorMessage = err instanceof Error ? err.message : "Failed to initialize chat. Please try again.";
+        setError(errorMessage);
+        return;
+      }
+    }
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -143,7 +238,7 @@ What would you like to work on?`,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          threadId,
+          threadId: currentThreadId,
           message: content.trim(),
           scriptContent,
         }),
@@ -183,7 +278,72 @@ What would you like to work on?`,
     } finally {
       setIsTyping(false);
     }
-  };
+  }, [threadId, scriptContent, scriptId, messages.length]);
+
+  // Listen for custom event to set input value
+  useEffect(() => {
+    const handleSetInput = (event: Event) => {
+      const customEvent = event as CustomEvent<{ text: string }>;
+      if (customEvent.detail?.text) {
+        setInputValue(customEvent.detail.text);
+        // Focus the input field
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 100);
+      }
+    };
+
+    window.addEventListener('setChatInput', handleSetInput as EventListener);
+    return () => {
+      window.removeEventListener('setChatInput', handleSetInput as EventListener);
+    };
+  }, []);
+
+  // Memoize the ref object functions
+  const sendMessageRef = useRef(sendMessage);
+  const initializeChatRef = useRef(initializeChat);
+  const threadIdRef = useRef(threadId);
+  const setInputValueRef = useRef(setInputValue);
+  
+  // Update refs when values change
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+    initializeChatRef.current = initializeChat;
+    threadIdRef.current = threadId;
+    setInputValueRef.current = setInputValue;
+  }, [sendMessage, initializeChat, threadId, setInputValue]);
+
+  // Expose sendMessage function to parent component
+  useEffect(() => {
+    if (onSendMessageRef) {
+      const refObject = {
+        sendMessage: (message: string) => {
+          if (threadIdRef.current) {
+            sendMessageRef.current(message);
+          } else {
+            // Initialize chat first, then send message
+            initializeChatRef.current().then(() => {
+              setTimeout(() => sendMessageRef.current(message), 500);
+            });
+          }
+        },
+        setInputValue: (value: string) => {
+          setInputValueRef.current(value);
+          // Focus and resize textarea
+          setTimeout(() => {
+            const textarea = inputRef.current as HTMLTextAreaElement;
+            if (textarea) {
+              textarea.focus();
+              textarea.style.height = 'auto';
+              textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+            }
+          }, 100);
+        },
+      };
+      
+      onSendMessageRef(refObject);
+    }
+  }, [onSendMessageRef]); // Only depend on onSendMessageRef, use refs for everything else
 
   const handleQuickAction = (action: string) => {
     sendMessage(action);
@@ -203,30 +363,22 @@ What would you like to work on?`,
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (inputValue.trim()) {
-        sendMessage(inputValue);
-      }
-    }
-  };
 
   // Floating position styles
   const containerClasses =
     position === "floating"
-      ? "fixed bottom-6 right-6 w-[380px] h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50"
+      ? "fixed bottom-6 right-6 w-[380px] h-[600px] bg-white rounded-[12px] shadow-2xl flex flex-col overflow-hidden z-50 border border-gray-200"
       : "w-full h-full bg-white rounded-[12px] flex flex-col overflow-hidden";
 
   // For embedded position, always show the chat (don't require isOpen)
   // For floating position, only show when isOpen is true
   if (position === "floating" && !isOpen) {
     return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-50 hover:scale-110"
-        aria-label="Open chat"
-      >
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-6 right-6 w-14 h-14 bg-black text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-50 hover:scale-110"
+          aria-label="Open chat"
+        >
         <svg
           width="24"
           height="24"
@@ -255,71 +407,49 @@ What would you like to work on?`,
       {/* Chat Window */}
       {(isOpen || position === "embedded") && (
         <div className={containerClasses}>
-          {/* Header */}
-          <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-4 text-white">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-xl">
-                🤖
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-base">ScriptBot</h3>
-                <p className="text-xs flex items-center gap-1.5">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                  Online Now
-                </p>
-              </div>
-              {position === "floating" && (
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="hover:bg-white/20 rounded-full p-1.5 transition-colors"
-                  aria-label="Close chat"
+          {/* Header - Removed title, only show close button for floating */}
+          {position === "floating" && (
+            <div className="border-b border-gray-200 p-2 bg-white flex justify-end">
+              <button
+                onClick={() => setIsOpen(false)}
+                className="hover:bg-gray-100 rounded-full p-1.5 transition-colors text-gray-600"
+                aria-label="Close chat"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              )}
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
             {messages.map((message) => (
               <div
                 key={message.id}
                 className={`flex gap-2 ${
-                  message.role === "user" ? "flex-row-reverse" : ""
+                  message.role === "user" ? "justify-end" : "justify-start"
                 } animate-in fade-in slide-in-from-bottom-2`}
               >
-                {/* Avatar */}
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 ${
-                    message.role === "assistant"
-                      ? "bg-purple-500"
-                      : "bg-blue-500"
-                  }`}
-                >
-                  {message.role === "assistant" ? "🤖" : "Y"}
-                </div>
-
-                {/* Message Bubble */}
-                <div className="flex flex-col gap-1 max-w-[75%]">
+                {/* Message Bubble - No Avatar */}
+                <div className="flex flex-col gap-1" style={{ maxWidth: message.role === "user" ? "90%" : "95%" }}>
                   <div
-                    className={`rounded-2xl p-3 shadow-sm ${
+                    className={`rounded-[12px] p-3 inline-block ${
                       message.role === "assistant"
-                        ? "bg-white rounded-tl-sm"
-                        : "bg-purple-500 text-white rounded-tr-sm"
+                        ? "bg-gray-100 rounded-tl-sm"
+                        : "bg-black text-white rounded-tr-sm"
                     }`}
+                    style={{ maxWidth: "100%" }}
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   </div>
@@ -335,7 +465,7 @@ What would you like to work on?`,
                       </pre>
                       <Button
                         onClick={() => handleApplyChanges(message.suggestedChanges!)}
-                        className="mt-2 w-full bg-green-500 hover:bg-green-600 text-white text-xs"
+                        className="mt-2 w-full bg-black hover:bg-gray-800 text-white text-xs rounded-[12px]"
                         size="sm"
                       >
                         ✓ Apply to Script
@@ -345,12 +475,12 @@ What would you like to work on?`,
 
                   {/* Action Buttons */}
                   {message.actionButtons && message.actionButtons.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="flex flex-col gap-2 mt-2">
                       {message.actionButtons.map((btn, idx) => (
                         <button
                           key={idx}
                           onClick={() => handleQuickAction(btn.action)}
-                          className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-full text-xs hover:bg-purple-200 transition-colors flex items-center gap-1"
+                          className="w-full px-3 py-1.5 bg-gray-100 text-gray-700 rounded-[12px] text-xs hover:bg-gray-200 transition-colors flex items-center gap-1 border border-gray-200"
                         >
                           {btn.emoji && <span>{btn.emoji}</span>}
                           {btn.label}
@@ -372,11 +502,8 @@ What would you like to work on?`,
 
             {/* Typing Indicator */}
             {isTyping && (
-              <div className="flex gap-2 animate-in fade-in">
-                <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white text-sm">
-                  🤖
-                </div>
-                <div className="bg-white rounded-2xl rounded-tl-sm p-3 shadow-sm">
+              <div className="flex justify-start animate-in fade-in">
+                <div className="bg-gray-100 rounded-[12px] rounded-tl-sm p-3">
                   <div className="flex gap-1">
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></span>
                     <span
@@ -410,37 +537,36 @@ What would you like to work on?`,
 
           {/* Input Area */}
           <div className="p-4 border-t bg-white">
-            <div className="flex gap-2 items-center">
-              <input
-                ref={inputRef}
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask me to edit your script..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                disabled={!threadId || isTyping}
-              />
-              <button
-                onClick={() => sendMessage(inputValue)}
-                disabled={!inputValue.trim() || !threadId || isTyping}
-                className="w-10 h-10 bg-purple-500 text-white rounded-full flex items-center justify-center hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Send message"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              </button>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1 relative">
+                <textarea
+                  ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+                  value={inputValue}
+                  onChange={(e) => {
+                    setInputValue(e.target.value);
+                    // Auto-resize textarea
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (inputValue.trim()) {
+                        sendMessage(inputValue);
+                        // Reset textarea height
+                        if (inputRef.current) {
+                          (inputRef.current as HTMLTextAreaElement).style.height = 'auto';
+                        }
+                      }
+                    }
+                  }}
+                  placeholder="Ask me to edit your script..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-black text-sm resize-none overflow-hidden min-h-[44px] max-h-[200px]"
+                  disabled={!threadId || isTyping}
+                  rows={1}
+                  style={{ height: 'auto' }}
+                />
+              </div>
             </div>
           </div>
         </div>

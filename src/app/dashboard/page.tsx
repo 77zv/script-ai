@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSession } from "@/lib/auth-client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -40,6 +40,16 @@ export default function Dashboard() {
   const [promptText, setPromptText] = useState("");
   const [isProcessingPrompt, setIsProcessingPrompt] = useState(false);
   const [promptBoxPosition, setPromptBoxPosition] = useState<{ x: number; y: number } | null>(null);
+  const [chatbotRef, setChatbotRef] = useState<{ sendMessage: (message: string) => void; setInputValue: (value: string) => void } | null>(null);
+  
+  // Memoize the callback to prevent infinite loops
+  const handleChatbotRef = useCallback((ref: { sendMessage: (message: string) => void; setInputValue: (value: string) => void }) => {
+    setChatbotRef((currentRef) => {
+      // Only update if the ref actually changed
+      if (currentRef === ref) return currentRef;
+      return ref;
+    });
+  }, []);
 
   // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
@@ -65,10 +75,20 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (session?.user) {
-    fetchScripts();
+      fetchScripts();
       checkBackboardProfile();
     }
   }, [session]);
+
+  // Update editedScript when switching between original and repurposed in edit mode
+  useEffect(() => {
+    if (isEditing && selectedScript) {
+      const scriptToEdit = showRepurposed 
+        ? (selectedScript.repurposedScript || selectedScript.script || "")
+        : (selectedScript.script || "");
+      setEditedScript(scriptToEdit);
+    }
+  }, [showRepurposed, isEditing, selectedScript]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -522,6 +542,7 @@ export default function Dashboard() {
                     <button
                       onClick={() => setSelectedScript(null)}
                       className="px-3 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700 flex-shrink-0"
+                      style={{ fontFamily: "var(--font-jersey-10)" }}
                     >
                       ← Back
                     </button>
@@ -560,24 +581,27 @@ export default function Dashboard() {
                   </div>
                   <div className="flex flex-col gap-2">
                     {!isEditing && (
-                      <button
-                        onClick={() => handleStartRename(selectedScript)}
-                        className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
-                      >
-                        Rename
-                      </button>
+                        <button
+                          onClick={() => handleStartRename(selectedScript)}
+                          className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+                          style={{ fontFamily: "var(--font-jersey-10)" }}
+                        >
+                          Rename
+                        </button>
                     )}
                     {isEditing ? (
                       <>
                         <button
                           onClick={handleCancelEdit}
                           className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+                          style={{ fontFamily: "var(--font-jersey-10)" }}
                         >
                           Cancel
                         </button>
                         <button
                           onClick={handleSaveEdit}
                           className="px-4 py-2 bg-black text-white rounded-[12px] hover:bg-gray-800 transition-colors"
+                          style={{ fontFamily: "var(--font-jersey-10)" }}
                         >
                           Save
                         </button>
@@ -586,6 +610,7 @@ export default function Dashboard() {
                       <button
                         onClick={handleStartEdit}
                         className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+                        style={{ fontFamily: "var(--font-jersey-10)" }}
                       >
                         Edit
                       </button>
@@ -603,6 +628,7 @@ export default function Dashboard() {
                           ? "bg-black text-white"
                           : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                       }`}
+                      style={{ fontFamily: "var(--font-jersey-10)" }}
                     >
                       Original
                     </button>
@@ -613,6 +639,7 @@ export default function Dashboard() {
                           ? "bg-black text-white"
                           : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                       }`}
+                      style={{ fontFamily: "var(--font-jersey-10)" }}
                     >
                       Repurposed
                     </button>
@@ -640,7 +667,6 @@ export default function Dashboard() {
                       value={editedScript}
                       onChange={(e) => setEditedScript(e.target.value)}
                       className="w-full h-full min-h-[400px] bg-white border border-gray-300 rounded-[12px] p-4 focus:outline-none focus:ring-2 focus:ring-black resize-none text-sm"
-                      style={{ fontFamily: "var(--font-jersey-10)" }}
                       placeholder="Enter your script here..."
                     />
                   ) : (() => {
@@ -650,7 +676,7 @@ export default function Dashboard() {
                     return scriptToShow ? (
                       <div
                         onMouseUp={handleTextSelection}
-                        className="whitespace-pre-wrap text-gray-800 select-text cursor-text"
+                        className="whitespace-pre-wrap text-gray-800 select-text cursor-text text-sm"
                       >
                         {scriptToShow}
                       </div>
@@ -662,6 +688,52 @@ export default function Dashboard() {
                       </p>
                     );
                   })()}
+
+                  {/* Text Selection Popup */}
+                  {showPromptBox && promptBoxPosition && selectedText && (
+                    <div
+                      className="absolute z-50 bg-white border border-gray-200 rounded-[12px] shadow-lg p-3 min-w-[280px] prompt-box-animation"
+                      style={{
+                        left: `${promptBoxPosition.x}px`,
+                        top: `${promptBoxPosition.y}px`,
+                        transform: promptBoxPosition.x > 200 ? 'none' : 'translateX(-50%)',
+                      }}
+                    >
+                      <div className="mb-2">
+                        <p className="text-xs text-gray-500 mb-1">Selected text:</p>
+                        <p className="text-sm text-gray-800 line-clamp-2">{selectedText}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (chatbotRef && selectedText) {
+                              // Set the selected text in the chat input field so user can customize
+                              chatbotRef.setInputValue(`"${selectedText}"`);
+                              setShowPromptBox(false);
+                              setSelectedText("");
+                              setSelectionRange(null);
+                              window.getSelection()?.removeAllRanges();
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 bg-black text-white rounded-[12px] text-sm hover:bg-gray-800 transition-colors"
+                          style={{ fontFamily: "var(--font-jersey-10)" }}
+                        >
+                          Add to Chat
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowPromptBox(false);
+                            setSelectedText("");
+                            setSelectionRange(null);
+                            window.getSelection()?.removeAllRanges();
+                          }}
+                          className="px-3 py-2 border border-gray-300 rounded-[12px] text-sm hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -676,6 +748,7 @@ export default function Dashboard() {
                   ? selectedScript.repurposedScript || selectedScript.script || ""
                   : selectedScript.script || ""
               }
+              onSendMessageRef={handleChatbotRef}
               onApplyChanges={async (newContent) => {
                 // Update the script with new content
                 if (!selectedScript) return;

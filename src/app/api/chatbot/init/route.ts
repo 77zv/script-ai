@@ -22,12 +22,15 @@ export async function POST(request: NextRequest) {
       scriptContent: string;
     };
 
-    if (!scriptId || !scriptContent) {
+    if (!scriptId) {
       return NextResponse.json(
-        { error: "scriptId and scriptContent are required" },
+        { error: "scriptId is required" },
         { status: 400 }
       );
     }
+
+    // scriptContent can be empty, but we'll use empty string as default
+    const contentToUse = scriptContent || "";
 
     // Get or create assistant for the user
     // First check if user has a backboard profile with assistantId
@@ -56,10 +59,12 @@ export async function POST(request: NextRequest) {
       threadId,
       assistantId,
     });
+
   } catch (error) {
     console.error("Error initializing chatbot:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: "Failed to initialize chatbot" },
+      { error: `Failed to initialize chatbot: ${errorMessage}` },
       { status: 500 }
     );
   }

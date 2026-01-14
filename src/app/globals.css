@@ -5,12 +5,14 @@
   --background: #FEFAEF;
   --foreground: #000000;
   --background-secondary: #E0E2E3;
+  --accent-grey: #8C8E91;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-background-secondary: var(--background-secondary);
+  --color-accent-grey: var(--accent-grey);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-gfs-didot: var(--font-gfs-didot);
@@ -22,6 +24,7 @@
     --background: #FEFAEF;
     --foreground: #000000;
     --background-secondary: #E0E2E3;
+    --accent-grey: #8C8E91;
   }
 }
 
