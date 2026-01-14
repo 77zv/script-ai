@@ -322,6 +322,42 @@ export default function Dashboard() {
     }
   };
 
+  const handleStartRename = (script: VideoScript) => {
+    setOpenMenuId(null);
+    setRenamingId(script.id);
+    setNewName(script.name);
+  };
+
+  const handleSaveRename = async (id: string) => {
+    if (!newName.trim()) return;
+
+    try {
+      const response = await fetch(`/api/videos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+
+      if (response.ok) {
+        setScripts((prev) =>
+          prev.map((s) => (s.id === id ? { ...s, name: newName.trim() } : s))
+        );
+        if (selectedScript?.id === id) {
+          setSelectedScript({ ...selectedScript, name: newName.trim() });
+        }
+        setRenamingId(null);
+        setNewName("");
+      }
+    } catch (error) {
+      console.error("Error renaming script:", error);
+    }
+  };
+
+  const handleCancelRename = () => {
+    setRenamingId(null);
+    setNewName("");
+  };
+
   // Show loading state while checking authentication
   if (isPending || !session?.user) {
     return (
@@ -474,7 +510,7 @@ export default function Dashboard() {
                       ? (selectedScript.repurposedScript || selectedScript.script)
                       : selectedScript.script;
                     return scriptToShow ? (
-                      <p className="whitespace-pre-wrap text-gray-800" style={{ fontFamily: "var(--font-jersey-10)" }}>
+                      <p className="whitespace-pre-wrap text-gray-800">
                         {scriptToShow}
                       </p>
                     ) : (
