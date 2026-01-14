@@ -30,3 +30,18 @@ body {
   color: var(--foreground);
   font-family: var(--font-gfs-didot);
 }
+
+@keyframes promptBoxSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.prompt-box-animation {
+  animation: promptBoxSlideIn 0.2s ease-out;
+}

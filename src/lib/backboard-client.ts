@@ -339,6 +339,93 @@ Recurring series ideas: ${series || "Not provided"}`,
 
 
 /**
+ * Determine if a user prompt is worth storing as a memory
+ * Returns true if the prompt reveals preferences, style, or patterns that would be useful for future repurposing
+ */
+async function isPromptWorthStoring(prompt: string, selectedText: string): Promise<boolean> {
+  // Very short prompts are usually one-off edits, not preferences
+  if (prompt.trim().length < 10) {
+    return false;
+  }
+
+  // Check for preference/style indicators
+  const preferenceKeywords = [
+    'more casual', 'more formal', 'more professional', 'more personal',
+    'shorter', 'longer', 'more detail', 'less detail',
+    'more technical', 'less technical', 'simpler', 'more complex',
+    'tone', 'style', 'voice', 'prefer', 'usually', 'always', 'never',
+    'like', 'dislike', 'want', 'don\'t want', 'avoid', 'instead'
+  ];
+
+  const lowerPrompt = prompt.toLowerCase();
+  const hasPreferenceKeyword = preferenceKeywords.some(keyword => 
+    lowerPrompt.includes(keyword)
+  );
+
+  // If it has preference keywords, it's likely worth storing
+  if (hasPreferenceKeyword) {
+    return true;
+  }
+
+  // If prompt is generic enough (not specific to the exact text), it might be a preference
+  // Very specific prompts (mentioning exact words/phrases from selectedText) are usually one-offs
+  const selectedWords = selectedText.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const promptWords = lowerPrompt.split(/\s+/);
+  const specificWordMatches = selectedWords.filter(word => 
+    promptWords.some(pw => pw.includes(word) || word.includes(pw))
+  ).length;
+
+  // If prompt doesn't heavily reference specific words from the text, it might be a general preference
+  if (specificWordMatches < 2 && prompt.length > 20) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Store a valuable user prompt as a memory in backboard.io
+ */
+export async function storePromptAsMemory(
+  assistantId: string,
+  prompt: string,
+  selectedText: string
+): Promise<string | null> {
+  const backboardClient = getClient();
+
+  try {
+    // Check if prompt is worth storing
+    const worthStoring = await isPromptWorthStoring(prompt, selectedText);
+    if (!worthStoring) {
+      return null;
+    }
+
+    // Create a memory chunk from the prompt
+    const memoryContent = `USER EDITING PREFERENCE:
+When editing content, the user prefers: ${prompt}
+
+This preference was expressed when editing text that contained: "${selectedText.substring(0, 100)}${selectedText.length > 100 ? '...' : ''}"
+
+Use this preference to guide future content repurposing and editing.`;
+
+    const memory = await backboardClient.addMemory(assistantId, {
+      content: memoryContent,
+      metadata: {
+        type: "user_preference",
+        source: "prompt",
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    return memory.memoryId;
+  } catch (error) {
+    console.error("Error storing prompt as memory:", error);
+    // Don't throw - this is optional, continue even if it fails
+    return null;
+  }
+}
+
+/**
  * Use RAG to repurpose a script line using backboard.io
  */
 export async function repurposeScriptWithRAG(

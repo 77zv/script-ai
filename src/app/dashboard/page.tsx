@@ -34,6 +34,12 @@ export default function Dashboard() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [selectedText, setSelectedText] = useState<string>("");
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+  const [showPromptBox, setShowPromptBox] = useState(false);
+  const [promptText, setPromptText] = useState("");
+  const [isProcessingPrompt, setIsProcessingPrompt] = useState(false);
+  const [promptBoxPosition, setPromptBoxPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
@@ -256,6 +262,173 @@ export default function Dashboard() {
     setNewName("");
   };
 
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      const selectedText = selection.toString().trim();
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const container = range.commonAncestorContainer.parentElement;
+      
+      // Only show prompt box if selection is within the script container
+      if (container && container.closest('.bg-gray-50')) {
+        setSelectedText(selectedText);
+        
+        // Position the box to the right of the selection, or above if not enough space
+        const scriptContainer = container.closest('.bg-gray-50');
+        if (scriptContainer) {
+          const containerRect = scriptContainer.getBoundingClientRect();
+          const relativeX = rect.left - containerRect.left;
+          const relativeY = rect.top - containerRect.top;
+          const relativeRight = rect.right - containerRect.left;
+          
+          // Check if there's space to the right (at least 350px)
+          const spaceToRight = containerRect.width - relativeRight;
+          const spaceAbove = relativeY;
+          
+          if (spaceToRight >= 350) {
+            // Position to the right of selection
+            setPromptBoxPosition({
+              x: relativeRight + 20,
+              y: relativeY,
+            });
+          } else if (spaceAbove >= 200) {
+            // Position above selection
+            setPromptBoxPosition({
+              x: relativeX + rect.width / 2,
+              y: relativeY - 10,
+            });
+          } else {
+            // Position below selection
+            setPromptBoxPosition({
+              x: relativeX + rect.width / 2,
+              y: relativeY + rect.height + 20,
+            });
+          }
+        } else {
+          // Fallback to absolute positioning
+          const spaceToRight = window.innerWidth - rect.right;
+          if (spaceToRight >= 350) {
+            setPromptBoxPosition({
+              x: rect.right + 20,
+              y: rect.top,
+            });
+          } else {
+            setPromptBoxPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.top - 10,
+            });
+          }
+        }
+        
+        setShowPromptBox(true);
+        
+        // Store selection range for replacement
+        const scriptToShow = showRepurposed 
+          ? (selectedScript?.repurposedScript || selectedScript?.script || "")
+          : (selectedScript?.script || "");
+        const start = scriptToShow.indexOf(selectedText);
+        if (start !== -1) {
+          setSelectionRange({ start, end: start + selectedText.length });
+        }
+      }
+    }
+  };
+
+  // Close prompt box when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showPromptBox) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.z-50') && !target.closest('.select-text')) {
+          setShowPromptBox(false);
+          setPromptText("");
+          setSelectedText("");
+          setSelectionRange(null);
+          window.getSelection()?.removeAllRanges();
+        }
+      }
+    };
+
+    if (showPromptBox) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showPromptBox]);
+
+  const handleProcessPrompt = async () => {
+    if (!selectedScript || !selectedText || !promptText.trim() || !selectionRange) return;
+    
+    setIsProcessingPrompt(true);
+    try {
+      const scriptToShow = showRepurposed 
+        ? (selectedScript.repurposedScript || selectedScript.script || "")
+        : (selectedScript.script || "");
+      
+      // Call API to process the prompt with backboard.io RAG
+      const response = await fetch("/api/videos/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scriptId: selectedScript.id,
+          selectedText,
+          prompt: promptText,
+          isRepurposed: showRepurposed,
+        }),
+      });
+
+      if (response.ok) {
+        const { updatedText } = await response.json();
+        
+        // Replace the selected text with the updated text
+        const newScript = 
+          scriptToShow.substring(0, selectionRange.start) +
+          updatedText +
+          scriptToShow.substring(selectionRange.end);
+        
+        // Update the script
+        if (showRepurposed) {
+          setSelectedScript({ ...selectedScript, repurposedScript: newScript });
+          setScripts((prev) =>
+            prev.map((s) =>
+              s.id === selectedScript.id ? { ...s, repurposedScript: newScript } : s
+            )
+          );
+        } else {
+          setSelectedScript({ ...selectedScript, script: newScript });
+          setScripts((prev) =>
+            prev.map((s) =>
+              s.id === selectedScript.id ? { ...s, script: newScript } : s
+            )
+          );
+        }
+        
+        // Save to database
+        await fetch(`/api/videos/${selectedScript.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            showRepurposed ? { repurposedScript: newScript } : { script: newScript }
+          ),
+        });
+        
+        // Reset prompt box
+        setShowPromptBox(false);
+        setPromptText("");
+        setSelectedText("");
+        setSelectionRange(null);
+        window.getSelection()?.removeAllRanges();
+      } else {
+        alert("Failed to process prompt");
+      }
+    } catch (error) {
+      console.error("Error processing prompt:", error);
+      alert("Failed to process prompt");
+    } finally {
+      setIsProcessingPrompt(false);
+    }
+  };
+
   const handleSaveRename = async (id: string) => {
     if (!newName.trim()) {
       alert("Name cannot be empty");
@@ -461,7 +634,7 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="bg-gray-50 rounded-[12px] p-6 min-h-[400px]">
+                <div className="bg-gray-50 rounded-[12px] p-6 min-h-[400px] relative">
                   {isEditing ? (
                     <textarea
                       value={editedScript}
@@ -475,10 +648,13 @@ export default function Dashboard() {
                       ? (selectedScript.repurposedScript || selectedScript.script)
                       : selectedScript.script;
                     return scriptToShow ? (
-                    <p className="whitespace-pre-wrap text-gray-800">
+                      <div
+                        onMouseUp={handleTextSelection}
+                        className="whitespace-pre-wrap text-gray-800 select-text cursor-text"
+                      >
                         {scriptToShow}
-                    </p>
-                  ) : (
+                      </div>
+                    ) : (
                       <p className="text-gray-500 italic">
                         {showRepurposed 
                           ? "No repurposed script available. Complete your backboard.io onboarding to get repurposed scripts."
