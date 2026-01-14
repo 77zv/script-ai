@@ -5,6 +5,7 @@ import { useSession } from "@/lib/auth-client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import ScriptChatbot from "@/components/ScriptChatbot";
 
 interface VideoScript {
   id: string;
@@ -492,170 +493,56 @@ export default function Dashboard() {
 
           {/* Right Sidebar - Chat Widget */}
           <div className="w-80 rounded-[12px] border border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm">
-            {/* Chat Header */}
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {/* Chatbot Icon */}
-                <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="white"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                </div>
-                <span className="text-base font-medium text-gray-800">Script AI Bot</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Refresh Button */}
-                <button className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-                    <path d="M21 3v5h-5" />
-                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-                    <path d="M3 21v-5h5" />
-                  </svg>
-                </button>
-                {/* Minimize Button */}
-                <button className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            </div>
+            <ScriptChatbot
+              scriptId={selectedScript.id}
+              scriptContent={
+                showRepurposed
+                  ? selectedScript.repurposedScript || selectedScript.script || ""
+                  : selectedScript.script || ""
+              }
+              onApplyChanges={async (newContent) => {
+                // Update the script with new content
+                if (!selectedScript) return;
 
-            {/* Conversation Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Date */}
-              <div className="text-center">
-                <p className="text-xs text-gray-500">October 15, 2024</p>
-                </div>
+                try {
+                  const updateData: { script?: string; repurposedScript?: string } = {};
+                  if (showRepurposed) {
+                    updateData.repurposedScript = newContent;
+                  } else {
+                    updateData.script = newContent;
+                  }
 
-              {/* Online Status */}
-              <div className="text-center">
-                <p className="text-xs text-gray-600">We&apos;re online ...</p>
-                </div>
+                  const response = await fetch(`/api/videos/${selectedScript.id}`, {
+                    method: "PATCH",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(updateData),
+                  });
 
-              {/* Chatbot Message */}
-              <div className="flex justify-start">
-                <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%]">
-                  <p className="text-sm text-gray-800">
-                    Hi there! Nice to see you 😊 We have a 10% promo code for new customers! Would you like to get one now? 🛍️
-                  </p>
-                </div>
-              </div>
+                  if (response.status === 401) {
+                    router.push("/sign-in");
+                    return;
+                  }
 
-              {/* Quick Reply Buttons */}
-              <div className="flex gap-2 flex-wrap">
-                <button className="px-4 py-2 bg-purple-600 text-white rounded-full text-sm hover:bg-purple-700 transition-colors">
-                  Yes, sure!
-                </button>
-                <button className="px-4 py-2 bg-purple-600 text-white rounded-full text-sm hover:bg-purple-700 transition-colors">
-                  No, thanks!
-                </button>
-              </div>
-
-              {/* Suggested Reply */}
-              <div className="flex justify-start">
-                <button className="px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm hover:bg-purple-200 transition-colors">
-                  What are your most popular products?
-                </button>
-              </div>
-            </div>
-
-            {/* Message Input Area */}
-            <div className="p-4 border-t border-gray-200">
-              <div className="flex items-center gap-2">
-                {/* Emoji Button */}
-                <button className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                    <line x1="9" y1="9" x2="9.01" y2="9" />
-                    <line x1="15" y1="9" x2="15.01" y2="9" />
-                  </svg>
-                </button>
-
-                {/* Attachment Button */}
-                <button className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
-                </button>
-
-                {/* Message Input */}
-                <input
-                  type="text"
-                  placeholder="Enter message"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                />
-
-                {/* Send Button */}
-                <button className="w-8 h-8 rounded-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center transition-colors">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="white"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
+                  if (response.ok) {
+                    const updatedScript = await response.json();
+                    setScripts((prev) =>
+                      prev.map((s) => (s.id === updatedScript.id ? updatedScript : s))
+                    );
+                    setSelectedScript(updatedScript);
+                    setEditedScript(newContent);
+                  } else {
+                    alert("Failed to apply changes");
+                  }
+                } catch (error) {
+                  console.error("Error applying changes:", error);
+                  alert("Failed to apply changes");
+                }
+              }}
+              position="embedded"
+              autoOpen={false}
+            />
           </div>
         </>
       ) : (
