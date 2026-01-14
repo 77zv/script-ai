@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useSession, signOut } from '@/lib/auth-client';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
+import { gsap } from 'gsap';
 
 export default function Nav() {
   const { data: session, isPending } = useSession();
@@ -11,6 +12,7 @@ export default function Nav() {
   const pathname = usePathname();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownMenuRef = useRef<HTMLDivElement>(null);
 
   const handleDashboardClick = (e: React.MouseEvent) => {
     if (pathname === '/dashboard') {
@@ -20,6 +22,39 @@ export default function Nav() {
     }
     // Otherwise, let the Link handle navigation normally
   };
+
+  // Animate dropdown in/out
+  useEffect(() => {
+    if (!dropdownMenuRef.current) return;
+
+    if (isDropdownOpen) {
+      // Animate in
+      gsap.fromTo(
+        dropdownMenuRef.current,
+        {
+          opacity: 0,
+          y: -10,
+          scale: 0.95,
+        },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: 0.2,
+          ease: "power2.out",
+        }
+      );
+    } else {
+      // Animate out
+      gsap.to(dropdownMenuRef.current, {
+        opacity: 0,
+        y: -10,
+        scale: 0.95,
+        duration: 0.15,
+        ease: "power2.in",
+      });
+    }
+  }, [isDropdownOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -62,10 +97,21 @@ export default function Nav() {
                   {session.user.name || session.user.email}
                 </button>
                 {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                  <div
+                    ref={dropdownMenuRef}
+                    className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-50 overflow-hidden"
+                    style={{ opacity: 0 }}
+                  >
+                    <Link
+                      href="/onboarding"
+                      onClick={() => setIsDropdownOpen(false)}
+                      className="block w-full text-left px-4 py-2 text-sm text-black hover:bg-gray-100 transition-colors"
+                    >
+                      Onboarding
+                    </Link>
                     <button
                       onClick={handleSignOut}
-                      className="w-full text-left px-4 py-2 text-sm text-black hover:bg-gray-100 transition-colors rounded-md"
+                      className="w-full text-left px-4 py-2 text-sm text-black hover:bg-gray-100 transition-colors"
                     >
                       Sign Out
                     </button>
