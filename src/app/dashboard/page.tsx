@@ -33,6 +33,12 @@ export default function Dashboard() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [selectedText, setSelectedText] = useState<string>("");
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+  const [showPromptBox, setShowPromptBox] = useState(false);
+  const [promptText, setPromptText] = useState("");
+  const [isProcessingPrompt, setIsProcessingPrompt] = useState(false);
+  const [promptBoxPosition, setPromptBoxPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
@@ -255,6 +261,173 @@ export default function Dashboard() {
     setNewName("");
   };
 
+  const handleTextSelection = () => {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      const selectedText = selection.toString().trim();
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      const container = range.commonAncestorContainer.parentElement;
+      
+      // Only show prompt box if selection is within the script container
+      if (container && container.closest('.bg-gray-50')) {
+        setSelectedText(selectedText);
+        
+        // Position the box to the right of the selection, or above if not enough space
+        const scriptContainer = container.closest('.bg-gray-50');
+        if (scriptContainer) {
+          const containerRect = scriptContainer.getBoundingClientRect();
+          const relativeX = rect.left - containerRect.left;
+          const relativeY = rect.top - containerRect.top;
+          const relativeRight = rect.right - containerRect.left;
+          
+          // Check if there's space to the right (at least 350px)
+          const spaceToRight = containerRect.width - relativeRight;
+          const spaceAbove = relativeY;
+          
+          if (spaceToRight >= 350) {
+            // Position to the right of selection
+            setPromptBoxPosition({
+              x: relativeRight + 20,
+              y: relativeY,
+            });
+          } else if (spaceAbove >= 200) {
+            // Position above selection
+            setPromptBoxPosition({
+              x: relativeX + rect.width / 2,
+              y: relativeY - 10,
+            });
+          } else {
+            // Position below selection
+            setPromptBoxPosition({
+              x: relativeX + rect.width / 2,
+              y: relativeY + rect.height + 20,
+            });
+          }
+        } else {
+          // Fallback to absolute positioning
+          const spaceToRight = window.innerWidth - rect.right;
+          if (spaceToRight >= 350) {
+            setPromptBoxPosition({
+              x: rect.right + 20,
+              y: rect.top,
+            });
+          } else {
+            setPromptBoxPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.top - 10,
+            });
+          }
+        }
+        
+        setShowPromptBox(true);
+        
+        // Store selection range for replacement
+        const scriptToShow = showRepurposed 
+          ? (selectedScript?.repurposedScript || selectedScript?.script || "")
+          : (selectedScript?.script || "");
+        const start = scriptToShow.indexOf(selectedText);
+        if (start !== -1) {
+          setSelectionRange({ start, end: start + selectedText.length });
+        }
+      }
+    }
+  };
+
+  // Close prompt box when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showPromptBox) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.z-50') && !target.closest('.select-text')) {
+          setShowPromptBox(false);
+          setPromptText("");
+          setSelectedText("");
+          setSelectionRange(null);
+          window.getSelection()?.removeAllRanges();
+        }
+      }
+    };
+
+    if (showPromptBox) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showPromptBox]);
+
+  const handleProcessPrompt = async () => {
+    if (!selectedScript || !selectedText || !promptText.trim() || !selectionRange) return;
+    
+    setIsProcessingPrompt(true);
+    try {
+      const scriptToShow = showRepurposed 
+        ? (selectedScript.repurposedScript || selectedScript.script || "")
+        : (selectedScript.script || "");
+      
+      // Call API to process the prompt with backboard.io RAG
+      const response = await fetch("/api/videos/prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scriptId: selectedScript.id,
+          selectedText,
+          prompt: promptText,
+          isRepurposed: showRepurposed,
+        }),
+      });
+
+      if (response.ok) {
+        const { updatedText } = await response.json();
+        
+        // Replace the selected text with the updated text
+        const newScript = 
+          scriptToShow.substring(0, selectionRange.start) +
+          updatedText +
+          scriptToShow.substring(selectionRange.end);
+        
+        // Update the script
+        if (showRepurposed) {
+          setSelectedScript({ ...selectedScript, repurposedScript: newScript });
+          setScripts((prev) =>
+            prev.map((s) =>
+              s.id === selectedScript.id ? { ...s, repurposedScript: newScript } : s
+            )
+          );
+        } else {
+          setSelectedScript({ ...selectedScript, script: newScript });
+          setScripts((prev) =>
+            prev.map((s) =>
+              s.id === selectedScript.id ? { ...s, script: newScript } : s
+            )
+          );
+        }
+        
+        // Save to database
+        await fetch(`/api/videos/${selectedScript.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            showRepurposed ? { repurposedScript: newScript } : { script: newScript }
+          ),
+        });
+        
+        // Reset prompt box
+        setShowPromptBox(false);
+        setPromptText("");
+        setSelectedText("");
+        setSelectionRange(null);
+        window.getSelection()?.removeAllRanges();
+      } else {
+        alert("Failed to process prompt");
+      }
+    } catch (error) {
+      console.error("Error processing prompt:", error);
+      alert("Failed to process prompt");
+    } finally {
+      setIsProcessingPrompt(false);
+    }
+  };
+
   const handleSaveRename = async (id: string) => {
     if (!newName.trim()) {
       alert("Name cannot be empty");
@@ -460,7 +633,7 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className="bg-gray-50 rounded-[12px] p-6 min-h-[400px]">
+                <div className="bg-gray-50 rounded-[12px] p-6 min-h-[400px] relative">
                   {isEditing ? (
                     <textarea
                       value={editedScript}
@@ -474,10 +647,13 @@ export default function Dashboard() {
                       ? (selectedScript.repurposedScript || selectedScript.script)
                       : selectedScript.script;
                     return scriptToShow ? (
-                    <p className="whitespace-pre-wrap text-gray-800">
+                      <div
+                        onMouseUp={handleTextSelection}
+                        className="whitespace-pre-wrap text-gray-800 select-text cursor-text"
+                      >
                         {scriptToShow}
-                    </p>
-                  ) : (
+                      </div>
+                    ) : (
                       <p className="text-gray-500 italic">
                         {showRepurposed 
                           ? "No repurposed script available. Complete your backboard.io onboarding to get repurposed scripts."
@@ -485,175 +661,60 @@ export default function Dashboard() {
                       </p>
                     );
                   })()}
+                  
+                  {/* Prompt Box */}
+                  {showPromptBox && promptBoxPosition && (
+                    <div
+                      className="absolute bg-white border border-gray-300 rounded-[12px] shadow-lg p-4 z-50 w-[320px] prompt-box-animation"
+                      style={{
+                        left: `${Math.max(10, Math.min(promptBoxPosition.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 330))}px`,
+                        top: `${Math.max(10, promptBoxPosition.y)}px`,
+                        transform: promptBoxPosition.x < 200 ? 'none' : 'none',
+                      }}
+                    >
+                      <div className="mb-2">
+                        <p className="text-xs text-gray-500 mb-1">Selected text:</p>
+                        <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded border border-gray-200 max-h-20 overflow-y-auto">
+                          {selectedText.length > 100 ? `${selectedText.substring(0, 100)}...` : selectedText}
+                        </p>
+                      </div>
+                      <textarea
+                        value={promptText}
+                        onChange={(e) => setPromptText(e.target.value)}
+                        placeholder="Enter your prompt about this text..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-[8px] focus:outline-none focus:ring-2 focus:ring-black resize-none text-sm mb-3"
+                        rows={3}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            setShowPromptBox(false);
+                            setPromptText("");
+                            window.getSelection()?.removeAllRanges();
+                          }
+                        }}
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => {
+                            setShowPromptBox(false);
+                            setPromptText("");
+                            window.getSelection()?.removeAllRanges();
+                          }}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-[8px] hover:bg-gray-50"
+                          disabled={isProcessingPrompt}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleProcessPrompt}
+                          disabled={!promptText.trim() || isProcessingPrompt}
+                          className="px-3 py-1.5 text-sm bg-black text-white rounded-[8px] hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                          {isProcessingPrompt ? "Processing..." : "Apply"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Sidebar - Chat Widget */}
-          <div className="w-80 rounded-[12px] border border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm">
-            {/* Chat Header */}
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {/* Chatbot Icon */}
-                <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="white"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                </div>
-                <span className="text-base font-medium text-gray-800">Script AI Bot</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Refresh Button */}
-                <button className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-                    <path d="M21 3v5h-5" />
-                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-                    <path d="M3 21v-5h5" />
-                  </svg>
-                </button>
-                {/* Minimize Button */}
-                <button className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Conversation Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Date */}
-              <div className="text-center">
-                <p className="text-xs text-gray-500">October 15, 2024</p>
-                </div>
-
-              {/* Online Status */}
-              <div className="text-center">
-                <p className="text-xs text-gray-600">We&apos;re online ...</p>
-                </div>
-
-              {/* Chatbot Message */}
-              <div className="flex justify-start">
-                <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%]">
-                  <p className="text-sm text-gray-800">
-                    Hi there! Nice to see you 😊 We have a 10% promo code for new customers! Would you like to get one now? 🛍️
-                  </p>
-                </div>
-              </div>
-
-              {/* Quick Reply Buttons */}
-              <div className="flex gap-2 flex-wrap">
-                <button className="px-4 py-2 bg-purple-600 text-white rounded-full text-sm hover:bg-purple-700 transition-colors">
-                  Yes, sure!
-                </button>
-                <button className="px-4 py-2 bg-purple-600 text-white rounded-full text-sm hover:bg-purple-700 transition-colors">
-                  No, thanks!
-                </button>
-              </div>
-
-              {/* Suggested Reply */}
-              <div className="flex justify-start">
-                <button className="px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm hover:bg-purple-200 transition-colors">
-                  What are your most popular products?
-                </button>
-              </div>
-            </div>
-
-            {/* Message Input Area */}
-            <div className="p-4 border-t border-gray-200">
-              <div className="flex items-center gap-2">
-                {/* Emoji Button */}
-                <button className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                    <line x1="9" y1="9" x2="9.01" y2="9" />
-                    <line x1="15" y1="9" x2="15.01" y2="9" />
-                  </svg>
-                </button>
-
-                {/* Attachment Button */}
-                <button className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-gray-600"
-                  >
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
-                </button>
-
-                {/* Message Input */}
-                <input
-                  type="text"
-                  placeholder="Enter message"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                />
-
-                {/* Send Button */}
-                <button className="w-8 h-8 rounded-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center transition-colors">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="white"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </button>
               </div>
             </div>
           </div>
