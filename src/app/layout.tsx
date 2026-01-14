@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, GFS_Didot} from "next/font/google";
+import { Geist, Geist_Mono, GFS_Didot } from "next/font/google";
 import GridOverlay from "@/components/layout/GridOverlay";
 import Nav from "@/components/layout/Nav";
 
@@ -20,6 +20,7 @@ const gfsDidot = GFS_Didot({
   subsets: ["latin"],
   weight: "400",
 });
+
 
 export const metadata: Metadata = {
   title: "Saved you time",

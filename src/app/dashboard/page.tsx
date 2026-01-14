@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/lib/auth-client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 interface VideoScript {
   id: string;
@@ -29,6 +30,9 @@ export default function Dashboard() {
   const [transcriptionStatus, setTranscriptionStatus] = useState<string>("");
   const [showRepurposed, setShowRepurposed] = useState(false);
   const [hasBackboardProfile, setHasBackboardProfile] = useState<boolean | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
 
   // Redirect if not authenticated (client-side fallback)
   useEffect(() => {
@@ -58,6 +62,22 @@ export default function Dashboard() {
       checkBackboardProfile();
     }
   }, [session]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (openMenuId && !target.closest(`[data-menu-id="${openMenuId}"]`)) {
+        setOpenMenuId(null);
+      }
+    };
+
+    if (openMenuId) {
+      setTimeout(() => {
+        document.addEventListener("click", handleClickOutside);
+      }, 0);
+      return () => document.removeEventListener("click", handleClickOutside);
+    }
+  }, [openMenuId]);
 
   const checkBackboardProfile = async () => {
     try {
@@ -224,6 +244,58 @@ export default function Dashboard() {
     }
   };
 
+  const handleStartRename = (script: VideoScript) => {
+    setOpenMenuId(null);
+    setRenamingId(script.id);
+    setNewName(script.name);
+  };
+
+  const handleCancelRename = () => {
+    setRenamingId(null);
+    setNewName("");
+  };
+
+  const handleSaveRename = async (id: string) => {
+    if (!newName.trim()) {
+      alert("Name cannot be empty");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/videos/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+        }),
+      });
+
+      if (response.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
+
+      if (response.ok) {
+        const updatedScript = await response.json();
+        setScripts((prev) =>
+          prev.map((s) => (s.id === updatedScript.id ? updatedScript : s))
+        );
+        if (selectedScript?.id === id) {
+          setSelectedScript(updatedScript);
+        }
+        setRenamingId(null);
+        setNewName("");
+      } else {
+        alert("Failed to rename script");
+      }
+    } catch (error) {
+      console.error("Error renaming script:", error);
+      alert("Failed to rename script");
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setOpenMenuId(null);
     if (!confirm("Are you sure you want to delete this script?")) return;
@@ -271,9 +343,56 @@ export default function Dashboard() {
           <div className="flex-1 flex flex-col rounded-[12px] border border-gray-200 bg-white overflow-hidden shadow-sm">
             <div className="flex-1 p-8 overflow-y-auto">
               <div className="max-w-4xl">
-                <div className="flex items-center justify-between mb-4">
-                  <h1 className="text-3xl font-medium">{selectedScript.name}</h1>
-                  <div className="flex gap-2">
+                <div className="flex items-center justify-between mb-4 gap-4">
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <button
+                      onClick={() => setSelectedScript(null)}
+                      className="px-3 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700 flex-shrink-0"
+                    >
+                      ← Back
+                    </button>
+                    {renamingId === selectedScript.id ? (
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <input
+                          type="text"
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleSaveRename(selectedScript.id);
+                            } else if (e.key === "Escape") {
+                              handleCancelRename();
+                            }
+                          }}
+                          className="px-3 py-2 border border-gray-300 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-black text-lg flex-1 min-w-0"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleSaveRename(selectedScript.id)}
+                          className="px-3 py-2 bg-black text-white rounded-[12px] hover:bg-gray-800 transition-colors flex-shrink-0"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={handleCancelRename}
+                          className="px-3 py-2 bg-gray-200 rounded-[12px] hover:bg-gray-300 transition-colors flex-shrink-0"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <h1 className="text-3xl font-medium truncate min-w-0" style={{ fontFamily: "var(--font-jersey-10)" }}>{selectedScript.name}</h1>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {!isEditing && (
+                      <button
+                        onClick={() => handleStartRename(selectedScript)}
+                        className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+                      >
+                        Rename
+                      </button>
+                    )}
                     {isEditing ? (
                       <>
                         <button
@@ -346,7 +465,8 @@ export default function Dashboard() {
                     <textarea
                       value={editedScript}
                       onChange={(e) => setEditedScript(e.target.value)}
-                      className="w-full h-full min-h-[400px] bg-white border border-gray-300 rounded-[12px] p-4 focus:outline-none focus:ring-2 focus:ring-black resize-none font-mono text-sm"
+                      className="w-full h-full min-h-[400px] bg-white border border-gray-300 rounded-[12px] p-4 focus:outline-none focus:ring-2 focus:ring-black resize-none text-sm"
+                      style={{ fontFamily: "var(--font-jersey-10)" }}
                       placeholder="Enter your script here..."
                     />
                   ) : (() => {
@@ -354,7 +474,7 @@ export default function Dashboard() {
                       ? (selectedScript.repurposedScript || selectedScript.script)
                       : selectedScript.script;
                     return scriptToShow ? (
-                      <p className="whitespace-pre-wrap text-gray-800">
+                      <p className="whitespace-pre-wrap text-gray-800" style={{ fontFamily: "var(--font-jersey-10)" }}>
                         {scriptToShow}
                       </p>
                     ) : (
@@ -370,31 +490,170 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Right Sidebar */}
+          {/* Right Sidebar - Chat Widget */}
           <div className="w-80 rounded-[12px] border border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-gray-200">
-              <h2 className="text-xl font-medium">Details</h2>
+            {/* Chat Header */}
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {/* Chatbot Icon */}
+                <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
+                <span className="text-base font-medium text-gray-800">Script AI Bot</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Refresh Button */}
+                <button className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-gray-600"
+                  >
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                    <path d="M3 21v-5h5" />
+                  </svg>
+                </button>
+                {/* Minimize Button */}
+                <button className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-gray-600"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Created</label>
-                  <p className="text-sm mt-1">
-                    {new Date(selectedScript.createdAt).toLocaleString()}
+
+            {/* Conversation Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Date */}
+              <div className="text-center">
+                <p className="text-xs text-gray-500">October 15, 2024</p>
+              </div>
+
+              {/* Online Status */}
+              <div className="text-center">
+                <p className="text-xs text-gray-600">We're online ...</p>
+              </div>
+
+              {/* Chatbot Message */}
+              <div className="flex justify-start">
+                <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%]">
+                  <p className="text-sm text-gray-800">
+                    Hi there! Nice to see you 😊 We have a 10% promo code for new customers! Would you like to get one now? 🛍️
                   </p>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Last Updated</label>
-                  <p className="text-sm mt-1">
-                    {new Date(selectedScript.updatedAt).toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Script ID</label>
-                  <p className="text-xs mt-1 font-mono text-gray-600 break-all">
-                    {selectedScript.id}
-                  </p>
-                </div>
+              </div>
+
+              {/* Quick Reply Buttons */}
+              <div className="flex gap-2 flex-wrap">
+                <button className="px-4 py-2 bg-purple-600 text-white rounded-full text-sm hover:bg-purple-700 transition-colors">
+                  Yes, sure!
+                </button>
+                <button className="px-4 py-2 bg-purple-600 text-white rounded-full text-sm hover:bg-purple-700 transition-colors">
+                  No, thanks!
+                </button>
+              </div>
+
+              {/* Suggested Reply */}
+              <div className="flex justify-start">
+                <button className="px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm hover:bg-purple-200 transition-colors">
+                  What are your most popular products?
+                </button>
+              </div>
+            </div>
+
+            {/* Message Input Area */}
+            <div className="p-4 border-t border-gray-200">
+              <div className="flex items-center gap-2">
+                {/* Emoji Button */}
+                <button className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-gray-600"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" />
+                  </svg>
+                </button>
+
+                {/* Attachment Button */}
+                <button className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-gray-600"
+                  >
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                  </svg>
+                </button>
+
+                {/* Message Input */}
+                <input
+                  type="text"
+                  placeholder="Enter message"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                />
+
+                {/* Send Button */}
+                <button className="w-8 h-8 rounded-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center transition-colors">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -402,7 +661,7 @@ export default function Dashboard() {
       ) : (
         // Full-width layout when no script is selected
         <div className="w-full max-w-5xl mx-auto flex flex-col p-8">
-          <h2 className="text-2xl font-semibold mb-6">My Scripts</h2>
+          <h2 className="text-6xl mb-6" style={{ fontFamily: "var(--font-jersey-10)" }}>My Scripts</h2>
           
           {/* Upload Zone */}
           <div
@@ -531,11 +790,24 @@ export default function Dashboard() {
               {scripts.map((script) => (
                 <div
                   key={script.id}
-                  className="aspect-rectangle p-8 rounded-[12px] bg-white border border-gray-300 hover:border-gray-300 hover:shadow-sm transition-all relative flex items-end justify-center"
+                  className="group aspect-rectangle p-8 rounded-[12px] bg-white border border-gray-300 hover:border-amber-400 hover:shadow-lg transition-all duration-300 relative flex items-end justify-center"
                 >
-                  {/* Circle Icon Container - Left */}
-                  <div className="absolute left-2 top-4 w-14">
-                    <div className="w-10 h-10 rounded-full bg-gray-300"></div>
+                  {/* Icon Container - Left */}
+                  <div className="absolute left-4 top-4 w-14">
+                    <Image
+                      src="/book.png"
+                      alt="Script icon"
+                      width={40}
+                      height={40}
+                      className="w-10 h-10 object-contain group-hover:hidden"
+                    />
+                    <Image
+                      src="/booko.png"
+                      alt="Script icon open"
+                      width={40}
+                      height={40}
+                      className="w-14 h-14 object-contain hidden group-hover:block transition-all duration-300 group-hover:-translate-y-2"
+                    />
                   </div>
 
                   {/* Three Dots Menu - Right */}
@@ -577,7 +849,7 @@ export default function Dashboard() {
                   {/* Name - Bottom Center */}
                   <div
                     onClick={() => setSelectedScript(script)}
-                    className="absolute bottom-2 left-14 right-8 cursor-pointer text-center px-2"
+                    className="absolute bottom-4 left-20 right-8 cursor-pointer text-center px-2"
                   >
                     {renamingId === script.id ? (
                       <div className="flex items-center gap-1">
@@ -616,7 +888,7 @@ export default function Dashboard() {
                         </button>
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-900 truncate">
+                      <p className="text-xl text-gray-800 truncate" style={{ fontFamily: "var(--font-jersey-10)" }}>
                         {script.name}
                       </p>
                     )}
