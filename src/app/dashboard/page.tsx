@@ -58,7 +58,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (session?.user) {
-      fetchScripts();
+    fetchScripts();
       checkBackboardProfile();
     }
   }, [session]);
@@ -322,42 +322,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleStartRename = (script: VideoScript) => {
-    setOpenMenuId(null);
-    setRenamingId(script.id);
-    setNewName(script.name);
-  };
-
-  const handleSaveRename = async (id: string) => {
-    if (!newName.trim()) return;
-
-    try {
-      const response = await fetch(`/api/videos/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim() }),
-      });
-
-      if (response.ok) {
-        setScripts((prev) =>
-          prev.map((s) => (s.id === id ? { ...s, name: newName.trim() } : s))
-        );
-        if (selectedScript?.id === id) {
-          setSelectedScript({ ...selectedScript, name: newName.trim() });
-        }
-        setRenamingId(null);
-        setNewName("");
-      }
-    } catch (error) {
-      console.error("Error renaming script:", error);
-    }
-  };
-
-  const handleCancelRename = () => {
-    setRenamingId(null);
-    setNewName("");
-  };
-
   // Show loading state while checking authentication
   if (isPending || !session?.user) {
     return (
@@ -510,10 +474,10 @@ export default function Dashboard() {
                       ? (selectedScript.repurposedScript || selectedScript.script)
                       : selectedScript.script;
                     return scriptToShow ? (
-                      <p className="whitespace-pre-wrap text-gray-800">
+                    <p className="whitespace-pre-wrap text-gray-800">
                         {scriptToShow}
-                      </p>
-                    ) : (
+                    </p>
+                  ) : (
                       <p className="text-gray-500 italic">
                         {showRepurposed 
                           ? "No repurposed script available. Complete your backboard.io onboarding to get repurposed scripts."
@@ -593,12 +557,12 @@ export default function Dashboard() {
               {/* Date */}
               <div className="text-center">
                 <p className="text-xs text-gray-500">October 15, 2024</p>
-              </div>
+                </div>
 
               {/* Online Status */}
               <div className="text-center">
-                <p className="text-xs text-gray-600">We're online ...</p>
-              </div>
+                <p className="text-xs text-gray-600">We&apos;re online ...</p>
+                </div>
 
               {/* Chatbot Message */}
               <div className="flex justify-start">
@@ -844,13 +808,13 @@ export default function Dashboard() {
                       height={40}
                       className="w-14 h-14 object-contain hidden group-hover:block transition-all duration-300 group-hover:-translate-y-2"
                     />
-                  </div>
+                      </div>
 
                   {/* Three Dots Menu - Right */}
                   <div className="absolute right-2 top-2" data-menu-id={script.id}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                         setOpenMenuId(openMenuId === script.id ? null : script.id);
                       }}
                       className="flex flex-col gap-0.5 p-0.5 hover:bg-gray-100 rounded"
@@ -875,9 +839,9 @@ export default function Dashboard() {
                         <button
                           onClick={() => handleDelete(script.id)}
                           className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50"
-                        >
-                          Delete
-                        </button>
+                      >
+                        Delete
+                      </button>
                       </div>
                     )}
                   </div>
@@ -928,9 +892,9 @@ export default function Dashboard() {
                         {script.name}
                       </p>
                     )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </div>
