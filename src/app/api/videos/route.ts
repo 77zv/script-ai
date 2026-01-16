@@ -69,17 +69,19 @@ async function generateRepurposedScript(
   // Create a new thread for this video
   const threadId = await getOrCreateThread(assistantId);
   
-  // Parse script into lines
-  const lines = originalScript.split(/\n+/).filter(line => line.trim().length > 0);
+  // Parse script into segments, preserving newline structure
+  // Split by double newlines to get segments (matching original format)
+  const segments = originalScript.split(/\n\s*\n/).filter(seg => seg.trim().length > 0);
   
-  // Repurpose each line using RAG
-  const repurposedLines: string[] = [];
-  for (const line of lines) {
-    const repurposed = await repurposeScriptWithRAG(threadId, assistantId, line.trim());
-    repurposedLines.push(repurposed);
+  // Repurpose each segment using RAG
+  const repurposedSegments: string[] = [];
+  for (const segment of segments) {
+    const repurposed = await repurposeScriptWithRAG(threadId, assistantId, segment.trim());
+    repurposedSegments.push(repurposed);
   }
   
-  return repurposedLines.join("\n");
+  // Join with double newlines (matching original format)
+  return repurposedSegments.join("\n\n");
 }
 
 // GET - Fetch all video scripts for the current user
