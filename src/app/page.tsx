@@ -84,7 +84,7 @@ export default function Home() {
               <Button
                 onClick={() => router.push(session?.user ? "/dashboard" : "/sign-in")}
                 size="lg"
-                className="px-8 py-3 text-base sm:text-lg"
+                className="px-8 py-3 text-base sm:text-lg shadow-[0_4px_0_0_rgba(0,0,0,0.5)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.5)] active:translate-y-[2px]"
               >
                 Get Started
               </Button>
