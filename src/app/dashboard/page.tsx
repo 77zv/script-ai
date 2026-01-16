@@ -772,6 +772,22 @@ export default function Dashboard() {
                 // Update the script with new content
                 if (!selectedScript) return;
 
+                // Safety check: warn if new content is suspiciously short
+                const currentContent = showRepurposed
+                  ? selectedScript.repurposedScript || selectedScript.script || ""
+                  : selectedScript.script || "";
+                
+                // If new content is less than 30% of original length, it might be a partial edit
+                if (currentContent.length > 0 && newContent.length < currentContent.length * 0.3) {
+                  const confirmed = window.confirm(
+                    "Warning: The new content is much shorter than the original script. " +
+                    "This might be a partial edit. Do you want to continue? The entire script will be replaced."
+                  );
+                  if (!confirmed) {
+                    return;
+                  }
+                }
+
                 try {
                   const updateData: { script?: string; repurposedScript?: string } = {};
                   if (showRepurposed) {
