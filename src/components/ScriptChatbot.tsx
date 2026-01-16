@@ -43,6 +43,7 @@ export default function ScriptChatbot({
   const [isTyping, setIsTyping] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedSuggestions, setExpandedSuggestions] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
@@ -455,23 +456,51 @@ What would you like to work on?`,
                   </div>
 
                   {/* Suggested Changes */}
-                  {message.suggestedChanges && (
-                    <div className="bg-gray-100 rounded-lg p-3 mt-2 border border-gray-200">
-                      <p className="text-xs font-medium text-gray-700 mb-2">
-                        Suggested Changes:
-                      </p>
-                      <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono bg-white p-2 rounded border">
-                        {message.suggestedChanges}
-                      </pre>
-                      <Button
-                        onClick={() => handleApplyChanges(message.suggestedChanges!)}
-                        className="mt-2 w-full bg-black hover:bg-gray-800 text-white text-xs rounded-[12px]"
-                        size="sm"
-                      >
-                        ✓ Apply to Script
-                      </Button>
-                    </div>
-                  )}
+                  {message.suggestedChanges && (() => {
+                    const isExpanded = expandedSuggestions.has(message.id);
+                    const lines = message.suggestedChanges.split('\n');
+                    const previewLines = 3;
+                    const showPreview = lines.length > previewLines && !isExpanded;
+                    const displayText = showPreview 
+                      ? lines.slice(0, previewLines).join('\n') + '\n...'
+                      : message.suggestedChanges;
+                    
+                    return (
+                      <div className="bg-gray-100 rounded-lg p-3 mt-2 border border-gray-200">
+                        <p className="text-xs font-medium text-gray-700 mb-2">
+                          Suggested Changes:
+                        </p>
+                        <pre className="text-xs text-gray-800 whitespace-pre-wrap font-mono bg-white p-2 rounded border max-h-[300px] overflow-y-auto">
+                          {displayText}
+                        </pre>
+                        {lines.length > previewLines && (
+                          <button
+                            onClick={() => {
+                              setExpandedSuggestions(prev => {
+                                const next = new Set(prev);
+                                if (isExpanded) {
+                                  next.delete(message.id);
+                                } else {
+                                  next.add(message.id);
+                                }
+                                return next;
+                              });
+                            }}
+                            className="mt-2 text-xs text-gray-600 hover:text-gray-800 underline"
+                          >
+                            {isExpanded ? 'Show less' : `Show full script (${lines.length} lines)`}
+                          </button>
+                        )}
+                        <Button
+                          onClick={() => handleApplyChanges(message.suggestedChanges!)}
+                          className="mt-2 w-full bg-black hover:bg-gray-800 text-white text-xs rounded-[12px]"
+                          size="sm"
+                        >
+                          ✓ Apply to Script
+                        </Button>
+                      </div>
+                    );
+                  })()}
 
                   {/* Action Buttons */}
                   {message.actionButtons && message.actionButtons.length > 0 && (
