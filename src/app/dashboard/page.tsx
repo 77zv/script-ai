@@ -1,10 +1,12 @@
 "use client";
 
+
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "@/lib/auth-client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+
 import ScriptChatbot from "@/components/ScriptChatbot";
 
 interface VideoScript {
@@ -34,6 +36,7 @@ export default function Dashboard() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+
   const [selectedText, setSelectedText] = useState<string>("");
   const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
   const [showPromptBox, setShowPromptBox] = useState(false);
@@ -79,6 +82,7 @@ export default function Dashboard() {
       checkBackboardProfile();
     }
   }, [session]);
+
 
   // Update editedScript when switching between original and repurposed in edit mode
   useEffect(() => {
@@ -281,6 +285,7 @@ export default function Dashboard() {
     setRenamingId(null);
     setNewName("");
   };
+
 
   const handleTextSelection = () => {
     const selection = window.getSelection();
@@ -542,6 +547,7 @@ export default function Dashboard() {
                     <button
                       onClick={() => setSelectedScript(null)}
                       className="px-3 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700 flex-shrink-0"
+
                       style={{ fontFamily: "var(--font-jersey-10)" }}
                     >
                       ← Back
@@ -581,19 +587,21 @@ export default function Dashboard() {
                   </div>
                   <div className="flex flex-col gap-2">
                     {!isEditing && (
-                        <button
-                          onClick={() => handleStartRename(selectedScript)}
-                          className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+                      <button
+                        onClick={() => handleStartRename(selectedScript)}
+                        className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+
                           style={{ fontFamily: "var(--font-jersey-10)" }}
-                        >
-                          Rename
-                        </button>
+                      >
+                        Rename
+                      </button>
                     )}
                     {isEditing ? (
                       <>
                         <button
                           onClick={handleCancelEdit}
                           className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+
                           style={{ fontFamily: "var(--font-jersey-10)" }}
                         >
                           Cancel
@@ -601,6 +609,7 @@ export default function Dashboard() {
                         <button
                           onClick={handleSaveEdit}
                           className="px-4 py-2 bg-black text-white rounded-[12px] hover:bg-gray-800 transition-colors"
+
                           style={{ fontFamily: "var(--font-jersey-10)" }}
                         >
                           Save
@@ -610,6 +619,7 @@ export default function Dashboard() {
                       <button
                         onClick={handleStartEdit}
                         className="px-4 py-2 border border-gray-300 rounded-[12px] hover:bg-gray-50 transition-colors text-gray-700"
+
                         style={{ fontFamily: "var(--font-jersey-10)" }}
                       >
                         Edit
@@ -628,6 +638,7 @@ export default function Dashboard() {
                           ? "bg-black text-white"
                           : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                       }`}
+
                       style={{ fontFamily: "var(--font-jersey-10)" }}
                     >
                       Original
@@ -639,6 +650,7 @@ export default function Dashboard() {
                           ? "bg-black text-white"
                           : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                       }`}
+
                       style={{ fontFamily: "var(--font-jersey-10)" }}
                     >
                       Repurposed
@@ -661,6 +673,7 @@ export default function Dashboard() {
                   </div>
                 )}
 
+
                 <div className="bg-gray-50 rounded-[12px] p-6 min-h-[400px] relative">
                   {isEditing ? (
                     <textarea
@@ -674,11 +687,13 @@ export default function Dashboard() {
                       ? (selectedScript.repurposedScript || selectedScript.script)
                       : selectedScript.script;
                     return scriptToShow ? (
+
                       <div
                         onMouseUp={handleTextSelection}
                         className="whitespace-pre-wrap text-gray-800 select-text cursor-text text-sm"
                       >
                         {scriptToShow}
+
                       </div>
                     ) : (
                       <p className="text-gray-500 italic">
@@ -688,6 +703,7 @@ export default function Dashboard() {
                       </p>
                     );
                   })()}
+
 
                   {/* Text Selection Popup */}
                   {showPromptBox && promptBoxPosition && selectedText && (
@@ -702,7 +718,8 @@ export default function Dashboard() {
                       <div className="mb-2">
                         <p className="text-xs text-gray-500 mb-1">Selected text:</p>
                         <p className="text-sm text-gray-800 line-clamp-2">{selectedText}</p>
-                      </div>
+            </div>
+
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
@@ -731,13 +748,15 @@ export default function Dashboard() {
                         >
                           Cancel
                         </button>
-                      </div>
-                    </div>
+                </div>
+                </div>
+
                   )}
                 </div>
               </div>
             </div>
           </div>
+
 
           {/* Right Sidebar - Chat Widget */}
           <div className="w-80 rounded-[12px] border border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm">
@@ -926,7 +945,7 @@ export default function Dashboard() {
               {scripts.map((script) => (
                 <div
                   key={script.id}
-                  className="group aspect-rectangle p-8 rounded-[12px] bg-white border border-gray-300 hover:border-amber-400 hover:shadow-lg transition-all duration-300 relative flex items-end justify-center"
+                  className="group aspect-rectangle p-8 rounded-[12px] bg-white border border-gray-300 hover:border-amber-400 hover:shadow-lg transition-all duration-300 relative flex items-end justify-center shadow-[0_4px_0_0_rgba(0,0,0,0.1)] hover:shadow-[0_4px_0_0_rgba(0,0,0,0.15)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.15)] active:translate-y-[2px]"
                 >
                   {/* Icon Container - Left */}
                   <div className="absolute left-4 top-4 w-14">
@@ -944,13 +963,13 @@ export default function Dashboard() {
                       height={40}
                       className="w-14 h-14 object-contain hidden group-hover:block transition-all duration-300 group-hover:-translate-y-2"
                     />
-                      </div>
+                  </div>
 
                   {/* Three Dots Menu - Right */}
                   <div className="absolute right-2 top-2" data-menu-id={script.id}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setOpenMenuId(openMenuId === script.id ? null : script.id);
                       }}
                       className="flex flex-col gap-0.5 p-0.5 hover:bg-gray-100 rounded"
@@ -975,9 +994,9 @@ export default function Dashboard() {
                         <button
                           onClick={() => handleDelete(script.id)}
                           className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
+                        >
+                          Delete
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1028,13 +1047,14 @@ export default function Dashboard() {
                         {script.name}
                       </p>
                     )}
-                    </div>
                   </div>
-                ))}
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
     </div>
   );
+
 }

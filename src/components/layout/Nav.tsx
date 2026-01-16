@@ -121,7 +121,7 @@ export default function Nav() {
               <Link 
                 href="/dashboard"
                 onClick={handleDashboardClick}
-                className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-opacity"
+                className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-all relative shadow-[0_4px_0_0_rgba(0,0,0,0.5)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.5)] active:translate-y-[2px]"
               >
                 Dashboard
               </Link>
@@ -137,7 +137,7 @@ export default function Nav() {
               <Link 
                 href="/dashboard"
                 onClick={handleDashboardClick}
-                className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-opacity"
+                className="px-4 py-2 bg-black text-white rounded-full text-sm hover:opacity-90 transition-all relative shadow-[0_4px_0_0_rgba(0,0,0,0.5)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.5)] active:translate-y-[2px]"
               >
                 Dashboard
               </Link>
