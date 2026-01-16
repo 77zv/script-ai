@@ -366,10 +366,10 @@ export default function Onboarding() {
             <button
               key={section.number}
               onClick={() => setCurrentSection(section.number)}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
+              className={`px-3 py-1 rounded-full text-sm transition-all relative ${
                 currentSection === section.number
-                  ? "bg-black text-white"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  ? "bg-black text-white shadow-[0_4px_0_0_rgba(0,0,0,0.5)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.5)] active:translate-y-[2px]"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-[0_4px_0_0_rgba(0,0,0,0.1)] hover:shadow-[0_4px_0_0_rgba(0,0,0,0.15)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.15)] active:translate-y-[2px]"
               }`}
             >
               {section.number}
@@ -404,7 +404,7 @@ export default function Onboarding() {
         <button
           onClick={() => setCurrentSection(Math.max(1, currentSection - 1))}
           disabled={currentSection === 1}
-          className="px-6 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-gray-300 text-gray-700 rounded-full hover:bg-gray-400 transition-all relative shadow-[0_4px_0_0_rgba(0,0,0,0.2)] hover:shadow-[0_4px_0_0_rgba(0,0,0,0.25)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.25)] active:translate-y-[2px] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
         >
           Previous
         </button>
@@ -412,14 +412,14 @@ export default function Onboarding() {
           <button
             onClick={saveProfile}
             disabled={saving}
-            className="px-6 py-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-colors disabled:opacity-50"
+            className="px-6 py-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-all relative shadow-[0_4px_0_0_rgba(0,0,0,0.1)] hover:shadow-[0_4px_0_0_rgba(0,0,0,0.15)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.15)] active:translate-y-[2px] disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
           >
             {saving ? "Saving..." : "Save Progress"}
           </button>
           {currentSection < 10 ? (
             <button
               onClick={() => setCurrentSection(Math.min(10, currentSection + 1))}
-              className="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors"
+              className="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-all relative shadow-[0_4px_0_0_rgba(0,0,0,0.5)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.5)] active:translate-y-[2px]"
             >
               Next
             </button>
@@ -427,7 +427,7 @@ export default function Onboarding() {
             <button
               onClick={saveProfile}
               disabled={saving}
-              className="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors disabled:opacity-50"
+              className="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-all relative shadow-[0_4px_0_0_rgba(0,0,0,0.5)] active:shadow-[0_2px_0_0_rgba(0,0,0,0.5)] active:translate-y-[2px] disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
             >
               {saving ? "Saving..." : "Complete & Go to Dashboard"}
             </button>
